@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { AGENTS, adapterStatus, detect, installCommand, resolveAdapter } from './lib/agents.mjs'
 import { homedir } from 'node:os'
 import { loadConfig, saveConfig, configPath } from './lib/store.mjs'
+import { MAX_PERSONA_CHARS, personaPath, readPersona, writePersona } from './lib/personas.mjs'
 import { probePort, startPageServer } from './lib/server.mjs'
 import { runAcpTask } from './lib/acp.mjs'
 
@@ -43,12 +44,17 @@ export async function apply(ctx, pluginConfig = {}) {
     ? pluginConfig.firstChunkMs
     : 30_000
   const detections = new Map()
+  const personas = new Map()
   const pagePath = fileURLToPath(new URL('./public/index.html', import.meta.url))
   const disposers = new Map()
   let server
 
   /** In-flight adapter installations, keyed by agent id. */
   const installs = new Map()
+
+  for (const agent of AGENTS) {
+    personas.set(agent.id, await readPersona(agent.id))
+  }
 
   /**
    * Adapter status for one agent, including any in-flight install.
@@ -120,7 +126,7 @@ export async function apply(ctx, pluginConfig = {}) {
       const wanted = entry.enabled && detection?.available === true && adapterReady
       const existing = disposers.get(agent.id)
       if (wanted && existing === undefined) {
-        const tool = buildTool(agent, config, firstChunkMs)
+        const tool = buildTool(agent, config, firstChunkMs, personas.get(agent.id)?.tag ?? '')
         const dispose = ctx.effect
           ? ctx.effect(() => ctx.tools.register(tool))
           : ctx.tools.register(tool)
@@ -145,14 +151,17 @@ export async function apply(ctx, pluginConfig = {}) {
     agents: AGENTS.map((agent) => {
       const entry = config.agents[agent.id]
       const adapter = resolveAdapter(agent, entry)
-      const effectiveLabel = (entry.label || '').trim() || agent.label
+      const role = personas.get(agent.id) ?? { tag: '', body: '' }
+      const effectiveLabel = (role.tag || '').trim() || agent.label
       const adapterInfo = adapterStatus(agent, entry)
       return {
         id: agent.id,
         label: effectiveLabel,
         cliLabel: agent.label,
-        roleLabel: entry.label,
-        persona: entry.persona,
+        roleLabel: role.tag,
+        persona: role.body,
+        personaPath: personaPath(agent.id),
+        personaMaxChars: MAX_PERSONA_CHARS,
         enabled: entry.enabled,
         command: entry.command,
         effectiveCommand: entry.command || agent.bin,
@@ -183,8 +192,16 @@ export async function apply(ctx, pluginConfig = {}) {
     const entry = config.agents[id]
     if (typeof patch.enabled === 'boolean') entry.enabled = patch.enabled
     if (typeof patch.command === 'string') entry.command = patch.command.trim()
-    if (typeof patch.label === 'string') entry.label = patch.label.trim().slice(0, 10)
-    if (typeof patch.persona === 'string') entry.persona = patch.persona.slice(0, 4000)
+    if (typeof patch.tag === 'string' || typeof patch.persona === 'string') {
+      const current = personas.get(id) ?? { tag: '', body: '' }
+      const next = await writePersona(
+        id,
+        typeof patch.tag === 'string' ? patch.tag : current.tag,
+        typeof patch.persona === 'string' ? patch.persona : current.body,
+      )
+      personas.set(id, next)
+      syncTools()
+    }
     if (typeof patch.adapterCommand === 'string' && patch.adapterCommand.trim() !== '') {
       entry.adapterCommand = patch.adapterCommand.trim()
     }
@@ -321,15 +338,14 @@ export function composeTask(entry, fallbackLabel, task) {
   return `【角色】你是「${name}」。\n${persona}\n\n【任务】\n${task}`
 }
 
-function buildTool(agent, config, firstChunkMs) {
+function buildTool(agent, config, firstChunkMs, roleTag) {
   const entry = config.agents[agent.id]
-  const roleName = (entry.label || '').trim() || agent.label
-  const hasPersona = (entry.persona || '').trim() !== ''
+  const roleName = (roleTag || '').trim() || agent.label
   return {
     name: `ask_${agent.id}`,
     description: `Delegate one self-contained task to ${roleName} (${agent.label}) through its ACP adapter and return the final answer. `
       + `The child runs in its own process as "${agent.id}" and receives only the task text, never this conversation.`
-      + (hasPersona ? ` It follows the role definition configured on the bridge panel.` : ''),
+      + (roleName === agent.label ? '' : ' It follows the role definition configured on the bridge panel.'),
     parameters: {
       type: 'object',
       properties: { task: { type: 'string', description: 'The complete, self-contained task for the child agent.' } },
@@ -349,11 +365,12 @@ function buildTool(agent, config, firstChunkMs) {
     async execute(args, exec) {
       try {
         const adapter = resolveAdapter(agent, entry)
+        const role = await readPersona(agent.id)
         const result = await runAcpTask({
           command: adapter.command,
           args: adapter.args,
           cwd: process.cwd(),
-          task: composeTask(entry, agent.label, String(args.task)),
+          task: composeTask({ label: role.tag, persona: role.body }, agent.label, String(args.task)),
           timeoutMs: 240_000,
           firstChunkMs,
           signal: exec?.signal,

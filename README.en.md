@@ -115,19 +115,44 @@ this plugin intentionally has no "raw CLI" fallback, so there is only one dispat
 
 ### Role label and role definition
 
-Each card takes a **role label** (≤10 characters, display and tool description only) and an optional
-**role definition** (≤4000 characters). The definition is prepended to every dispatched task:
+Click any row to open its detail view and edit the **role label** (≤10 characters) and the
+**role definition** (≤2000 characters). Definitions are not stored in config; each agent gets a
+Markdown file:
+
+```
+~/.dsh/agent-bridge/personas/claude.md
+~/.dsh/agent-bridge/personas/codex.md
+```
+
+```markdown
+---
+tag: Reviewer
+---
+You are the reviewer. Report problems only...
+```
+
+**Hot reload**: the file is read on every dispatch, so edits made in the panel or in any editor
+apply to the next delegation without a restart. Defaults are seeded on first start:
+
+| Agent | Default tag |
+|---|---|
+| Claude Code | Creative lead |
+| Codex | Reviewer |
+
+The definition is prepended to the task:
 
 ```
 【Role】You are "Reviewer".
-Report problems only, no praise; output a numbered list with fixes.
+<body>
 
 【Task】
-<the caller's task>
+<caller task>
 ```
 
-This works with any adapter because it is plain task text — no system-prompt support required. With
-no definition configured the task is sent unchanged.
+With no definition the task is sent unchanged. Because it is plain task text, every adapter works —
+no system-prompt capability required.
+
+![Detail view](docs/detail.png)
 
 ### First-token deadline
 

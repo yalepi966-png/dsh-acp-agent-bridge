@@ -155,6 +155,26 @@
   }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+  .agent-list { grid-column: 1 / -1; display: grid; gap: 6px; }
+  .agent-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto;
+    align-items: center; gap: 8px; padding: 8px 11px;
+    background: var(--glass); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: var(--shadow); cursor: pointer;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    transition: transform .14s ease, box-shadow .14s ease;
+  }
+  .agent-row:hover { transform: translateY(-1px); box-shadow: 0 12px 26px rgba(120, 132, 160, .16); }
+  .row-name { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+  .row-name strong { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-tag { font-size: 9.5px; color: var(--ink-faint); white-space: nowrap; }
+  .chev { font-size: 15px; color: var(--ink-faint); line-height: 1; }
+  .detail { grid-column: 1 / -1; }
+  .detail-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; }
+  .detail-head strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .counter { float: right; font-size: 10px; color: var(--ink-faint); }
+  textarea.input { resize: vertical; min-height: 84px; line-height: 1.55; }
+
   @media (max-width: 640px) {
     .top { grid-template-columns: minmax(0, 1fr); }
     .port-row { grid-template-columns: minmax(0, 1fr) auto auto; }
@@ -202,7 +222,9 @@
   <div class="toast" id="toast" role="status"></div>
 
 <script>
-let base = localStorage.getItem('agent-bridge-base') || location.origin
+let state = null
+let selected = null
+
 const toast = (message) => {
   const node = document.getElementById('toast')
   node.textContent = message
@@ -212,7 +234,7 @@ const toast = (message) => {
 }
 
 const api = async (path, init) => {
-  const response = await fetch(base + path, init)
+  const response = await fetch(path, init)
   const body = await response.json()
   if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`)
   return body
@@ -225,33 +247,68 @@ const el = (tag, className, text) => {
   return node
 }
 
+const statusOf = (agent) => {
+  const usable = agent.enabled && agent.detection.available && agent.adapter.ready
+  if (!agent.detection.available) return { text: '不可用', cls: 'bad' }
+  if (!agent.adapter.ready) return { text: '待装适配器', cls: 'off' }
+  return usable ? { text: '可以使用', cls: 'ready' } : { text: '已关闭', cls: 'off' }
+}
+
+const switchEl = (agent) => {
+  const node = el('button', 'switch')
+  node.setAttribute('role', 'switch')
+  node.setAttribute('aria-checked', String(agent.enabled))
+  node.setAttribute('aria-label', `${agent.label} 开关`)
+  node.onclick = (event) => { event.stopPropagation(); save(agent.id, { enabled: !agent.enabled }) }
+  return node
+}
+
+const renderHeader = () => {
+  document.getElementById('config-path').textContent = `配置：${state.configPath}`
+  const ready = state.agents.filter(a => a.enabled && a.detection.available && a.adapter.ready)
+  document.getElementById('overall').classList.toggle('is-off', ready.length === 0)
+  document.getElementById('overall-text').textContent = ready.length > 0 ? `已启用 ${ready.length} 个` : '未启用'
+  document.getElementById('port-card').style.display = selected === null ? '' : 'none'
+}
+
+const renderList = () => {
+  const list = el('div', 'agent-list')
+  for (const agent of state.agents) {
+    const status = statusOf(agent)
+    const row = el('div', 'agent-row')
+    row.onclick = () => { selected = agent.id; render() }
+
+    const name = el('div', 'row-name')
+    name.append(el('strong', null, agent.label))
+    if (agent.roleLabel) name.append(el('span', 'row-tag', agent.cliLabel))
+
+    row.append(name, el('span', `chip ${status.cls}`, status.text), switchEl(agent), el('span', 'chev', '›'))
+    list.append(row)
+  }
+  document.getElementById('cards').replaceChildren(list)
+}
+
 const adapterBlock = (agent) => {
-  const adapter = agent.adapter || {}
   const wrap = el('div', 'adapter')
-  const full = adapter.package || agent.adapterPackage
-  const short = full.split('/').pop()
-  const label = el('span', 'adapter-name', `ACP ${short} ${adapter.pinned || ''}`.trim())
+  const full = agent.adapter.package || ''
+  const label = el('span', 'adapter-name', `ACP ${full.split('/').pop()} ${agent.adapter.pinned || ''}`.trim())
   label.title = full
-
-  const status = el('span', `chip ${adapter.ready ? 'ready' : 'off'}`, adapter.ready
-    ? (adapter.source === 'config' ? '自定义' : `已安装${adapter.version ? ` · ${adapter.version}` : ''}`)
-    : (adapter.install?.status === 'installing' ? '安装中…' : '未安装'))
-
+  const status = el('span', `chip ${agent.adapter.ready ? 'ready' : 'off'}`, agent.adapter.ready
+    ? (agent.adapter.source === 'config' ? '自定义' : `已安装 ${agent.adapter.version || ''}`)
+    : '未安装')
   wrap.append(label, status)
-
-  if (!adapter.ready || adapter.install?.status === 'error') {
-    const button = el('button', 'btn small', adapter.install?.status === 'error' ? '重试安装' : '安装')
+  if (!agent.adapter.ready) {
+    const button = el('button', 'btn small', '安装')
     button.onclick = async () => {
       button.disabled = true
       button.textContent = '安装中…'
       try {
         await api(`/api/adapters/${agent.id}/install`, { method: 'POST' })
         for (;;) {
-          await new Promise(resolve => setTimeout(resolve, 2000))
+          await new Promise(r => setTimeout(r, 2000))
           const progress = await api(`/api/adapters/${agent.id}`)
           if (progress.install?.status === 'done' || progress.install?.status === 'error') {
-            if (progress.install.status === 'error') toast(progress.install.error || '安装失败')
-            else toast('适配器已安装')
+            toast(progress.install.status === 'error' ? (progress.install.error || '安装失败') : '适配器已安装')
             await load()
             return
           }
@@ -264,99 +321,75 @@ const adapterBlock = (agent) => {
     }
     wrap.append(button)
   }
-
-  if (adapter.install?.status === 'error') {
-    wrap.append(el('p', 'hint', adapter.install.error || '安装失败'))
-  }
   return wrap
 }
 
-const cardFor = (agent) => {
-  const card = el('section', 'card')
-  const head = el('div', 'card-head')
-  head.append(el('span', 'name', agent.label))
+const renderDetail = () => {
+  const agent = state.agents.find(a => a.id === selected)
+  if (agent === undefined) { selected = null; return render() }
+  const status = statusOf(agent)
+  const card = el('section', 'card detail')
 
-  const right = el('div', 'head-right')
-  const usable = agent.enabled && agent.detection.available
-  const chip = el('span', `chip ${agent.detection.available ? (usable ? 'ready' : 'off') : 'bad'}`,
-    agent.detection.available ? (usable ? '可以使用' : '已关闭') : '不可用')
-  const toggle = el('button', 'switch')
-  toggle.setAttribute('role', 'switch')
-  toggle.setAttribute('aria-checked', String(agent.enabled))
-  toggle.setAttribute('aria-label', `${agent.label} 开关`)
-  toggle.onclick = () => save(agent.id, { enabled: !agent.enabled })
-  right.append(chip, toggle)
-  head.append(right)
+  const head = el('div', 'detail-head')
+  const back = el('button', 'btn small', '‹ 返回')
+  back.onclick = () => { selected = null; render() }
+  head.append(back, el('strong', null, agent.label), el('span', `chip ${status.cls}`, status.text), switchEl(agent))
 
-  const summary = el('p', 'summary', agent.detection.available
-    ? (usable
-        ? `已开启，模型可以用 ask_${agent.id} 把任务派给它。`
-        : `已检测到 ${agent.detection.version || 'CLI'}，但开关关着，模型暂时用不了。`)
-    : `没有找到可用的 CLI：${agent.detection.reason || '未知原因'}。在下面填绝对路径可以手动指定。`)
+  const summary = el('p', 'summary', !agent.detection.available
+    ? `没有找到可用的 CLI：${agent.detection.reason || '未知原因'}`
+    : !agent.adapter.ready
+      ? 'CLI 已就绪，但还缺 ACP 适配器，安装后才能启用。'
+      : `模型可以用 ask_${agent.id} 把任务派给它。`)
+  const meta = el('p', 'hint', `${agent.cliLabel}${agent.detection.version ? ` · ${agent.detection.version}` : ''} · ${agent.personaPath}`)
 
-  const field = el('div', 'field')
-  field.append(el('label', 'label', agent.command === '' ? 'CLI 路径（自动探测）' : 'CLI 路径（手动指定）'))
-  const input = el('input', 'input')
-  input.value = agent.command || agent.detection.path || ''
-  input.placeholder = agent.effectiveCommand
-  field.append(input)
-  field.append(el('p', 'hint', agent.command === ''
-    ? '自动探测 · 每次启动重新解析'
-    : '固定路径 · 清空并保存可恢复自动'))
-  field.append(adapterBlock(agent))
+  const pathField = el('div', 'field')
+  pathField.append(el('label', 'label', agent.command === '' ? 'CLI 路径（自动探测）' : 'CLI 路径（手动指定）'))
+  const pathInput = el('input', 'input')
+  pathInput.value = agent.command || agent.detection.path || ''
+  pathInput.placeholder = agent.effectiveCommand
+  pathField.append(pathInput)
+  pathField.append(adapterBlock(agent))
 
-  const roleRow = el('div', 'role-row')
-  roleRow.append(el('span', 'label', '角色标签'))
-  const roleInput = el('input', 'input')
-  roleInput.value = agent.roleLabel || ''
-  roleInput.placeholder = agent.cliLabel
-  roleInput.maxLength = 10
-  roleRow.append(roleInput)
+  const tagField = el('div', 'role-row')
+  tagField.append(el('span', 'label', '角色标签'))
+  const tagInput = el('input', 'input')
+  tagInput.value = agent.roleLabel || ''
+  tagInput.placeholder = agent.cliLabel
+  tagInput.maxLength = 10
+  tagField.append(tagInput)
 
-  const details = document.createElement('details')
-  details.className = 'role'
-  const summaryEl = document.createElement('summary')
-  summaryEl.textContent = '角色设定'
-  const persona = document.createElement('textarea')
-  persona.className = 'input'
-  persona.rows = 3
+  const personaField = el('div', 'field')
+  const personaLabel = el('label', 'label', '角色设定（派遣时作为前置角色注入）')
+  const counter = el('span', 'counter', `0 / ${agent.personaMaxChars}`)
+  const persona = el('textarea', 'input')
+  persona.rows = 6
   persona.value = agent.persona || ''
-  persona.placeholder = '例如：你是严格的代码审查官，只报问题、不夸奖；输出编号列表，每条给修复建议。'
-  details.append(summaryEl, persona)
+  persona.placeholder = '写清楚：你是谁、关注什么、输出格式是什么。'
+  const syncCounter = () => { counter.textContent = `${persona.value.length} / ${agent.personaMaxChars}` }
+  persona.oninput = syncCounter
+  syncCounter()
+  personaField.append(personaLabel, counter, persona)
 
   const actions = el('div', 'actions')
   const saveButton = el('button', 'btn primary', '保存')
-  saveButton.onclick = () => save(agent.id, { command: input.value, label: roleInput.value, persona: persona.value })
-  actions.append(saveButton)
-  if (agent.command !== '') {
-    const reset = el('button', 'btn ghost', '恢复自动')
-    reset.onclick = () => save(agent.id, { command: '' })
-    actions.append(reset)
-  }
+  saveButton.onclick = () => save(agent.id, { command: pathInput.value, tag: tagInput.value, persona: persona.value })
+  actions.append(saveButton, el('span', 'hint', '保存后下一次派遣立即生效，无需重启。'))
 
-  card.append(head, summary, field, roleRow, details, actions)
-  return card
+  card.append(head, summary, meta, pathField, tagField, personaField, actions)
+  document.getElementById('cards').replaceChildren(card)
 }
 
-const render = (state) => {
-  document.getElementById('config-path').textContent = `配置：${state.configPath}`
-  const ready = state.agents.filter(agent => agent.enabled && agent.detection.available)
-  const overall = document.getElementById('overall')
-  overall.classList.toggle('is-off', ready.length === 0)
-  document.getElementById('overall-text').textContent = ready.length > 0
-    ? `已启用 ${ready.length} 个`
-    : '未启用'
-
-  document.getElementById('port-current').textContent = `当前 ${state.port}`
-  document.getElementById('port-input').value = state.port
-
-  const cards = document.getElementById('cards')
-  cards.replaceChildren(...state.agents.map(cardFor))
+const render = () => {
+  if (state === null) return
+  renderHeader()
+  if (selected === null) renderList()
+  else renderDetail()
 }
 
 const load = async () => {
   try {
-    render(await api('/api/state'))
+    state = await api('/api/state')
+    render()
   } catch (error) {
     document.getElementById('config-path').textContent = `读取失败：${error.message}`
   }
@@ -364,16 +397,17 @@ const load = async () => {
 
 const save = async (id, patch) => {
   try {
-    render(await api(`/api/agents/${id}`, {
+    state = await api(`/api/agents/${id}`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch),
-    }))
+    })
+    render()
     toast('已保存')
   } catch (error) {
     toast(error.message)
   }
 }
 
-const checkPort = async () => {
+document.getElementById('port-check').onclick = async () => {
   const port = Number(document.getElementById('port-input').value)
   try {
     const result = await api(`/api/port?port=${port}`)
@@ -385,32 +419,27 @@ const checkPort = async () => {
   }
 }
 
-const applyPort = async () => {
+document.getElementById('port-apply').onclick = async () => {
   const port = Number(document.getElementById('port-input').value)
   try {
     const result = await api('/api/port', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ port }),
     })
-    if (result.pageUrl) {
-      base = result.pageUrl.replace(/\/$/, '')
-      localStorage.setItem('agent-bridge-base', base)
-    }
-    render(result)
-    document.getElementById('port-status').textContent = `已切换：${base}`
     toast('端口已切换')
+    state = result
+    render()
   } catch (error) {
     document.getElementById('port-status').textContent = error.message
   }
 }
 
-document.getElementById('port-check').onclick = checkPort
-document.getElementById('port-apply').onclick = applyPort
 document.getElementById('probe').onclick = async (event) => {
   const button = event.currentTarget
   button.disabled = true
   button.textContent = '探测中…'
   try {
-    render(await api('/api/probe', { method: 'POST' }))
+    state = await api('/api/probe', { method: 'POST' })
+    render()
     toast(`已重新探测 · ${new Date().toLocaleTimeString()}`)
   } catch (error) {
     toast(error.message)
@@ -420,9 +449,9 @@ document.getElementById('probe').onclick = async (event) => {
   }
 }
 
-api('/api/state').then(render).catch((error) => {
-  document.getElementById('config-path').textContent = `读取失败：${error.message}`
-})
+const deepLink = new URLSearchParams(location.search).get('agent')
+if (deepLink) selected = deepLink
+load()
 </script>
 </body>
 </html>

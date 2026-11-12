@@ -3,6 +3,7 @@
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 import { AGENTS, adapterStatus, detect, installCommand, resolveAdapter } from './lib/agents.mjs'
+import { MAX_PERSONA_CHARS, personaPath, readPersona, writePersona } from './lib/personas.mjs'
 import { homedir } from 'node:os'
 import { configPath, loadConfig, saveConfig } from './lib/store.mjs'
 import { probePort, startPageServer } from './lib/server.mjs'
@@ -17,6 +18,8 @@ for (const agent of AGENTS) {
 }
 
 const installs = new Map()
+const personas = new Map()
+for (const agent of AGENTS) personas.set(agent.id, await readPersona(agent.id))
 const adapterState = (id) => {
   const agent = AGENTS.find(candidate => candidate.id === id)
   if (agent === undefined) throw new Error(`未知 agent: ${id}`)
@@ -58,12 +61,15 @@ const state = () => ({
     const entry = config.agents[agent.id]
     const adapter = resolveAdapter(agent, entry)
     const info = adapterStatus(agent, entry)
+    const role = personas.get(agent.id) ?? { tag: '', body: '' }
     return {
       id: agent.id,
-      label: (entry.label || '').trim() || agent.label,
+      label: (role.tag || '').trim() || agent.label,
       cliLabel: agent.label,
-      roleLabel: entry.label,
-      persona: entry.persona,
+      roleLabel: role.tag,
+      persona: role.body,
+      personaPath: personaPath(agent.id),
+      personaMaxChars: MAX_PERSONA_CHARS,
       enabled: entry.enabled,
       command: entry.command,
       effectiveCommand: entry.command || agent.bin,
@@ -88,8 +94,10 @@ const update = async (id, patch) => {
   if (entry === undefined) throw new Error(`未知 agent: ${id}`)
   if (typeof patch.enabled === 'boolean') entry.enabled = patch.enabled
   if (typeof patch.command === 'string') entry.command = patch.command.trim()
-  if (typeof patch.label === 'string') entry.label = patch.label.trim().slice(0, 10)
-  if (typeof patch.persona === 'string') entry.persona = patch.persona.slice(0, 4000)
+  if (typeof patch.tag === 'string' || typeof patch.persona === 'string') {
+    const current = personas.get(id) ?? { tag: '', body: '' }
+    personas.set(id, await writePersona(id, typeof patch.tag === 'string' ? patch.tag : current.tag, typeof patch.persona === 'string' ? patch.persona : current.body))
+  }
   if (typeof patch.adapterCommand === 'string' && patch.adapterCommand.trim() !== '') entry.adapterCommand = patch.adapterCommand.trim()
   if (Array.isArray(patch.adapterArgs)) entry.adapterArgs = patch.adapterArgs.map(String)
   await saveConfig(config)
