@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { AGENTS, detect, resolveAdapter } from './lib/agents.mjs'
 import { homedir } from 'node:os'
 import { loadConfig, saveConfig, configPath } from './lib/store.mjs'
-import { startPageServer } from './lib/server.mjs'
+import { probePort, startPageServer } from './lib/server.mjs'
 import { runAcpTask } from './lib/acp.mjs'
 
 export const name = 'agent-bridge'
@@ -85,6 +85,7 @@ export async function apply(ctx, pluginConfig = {}) {
   const state = () => ({
     configPath: configPath().replace(homedir(), '~'),
     pageUrl: server?.url,
+    port: currentPort(),
     agents: AGENTS.map((agent) => {
       const entry = config.agents[agent.id]
       const adapter = resolveAdapter(agent, entry)
@@ -134,6 +135,70 @@ export async function apply(ctx, pluginConfig = {}) {
     return state()
   }
 
+  /**
+   * The port the page server actually holds.
+   * @returns {number} Bound port, or the configured one before binding.
+   */
+  const currentPort = () => {
+    if (!server) return config.port
+    const address = new URL(server.url)
+    return Number(address.port)
+  }
+
+  /**
+   * Build the server options shared by the first bind and every rebind.
+   * @param {number} port - Port to bind.
+   * @returns {Promise<{url: string, close: () => Promise<void>}>} The bound server.
+   */
+  const bind = (port) => startPageServer({
+    port, update, state, probe, pagePath,
+    checkPort: (candidate) => checkPort(candidate),
+    setPort: (candidate) => setPort(candidate),
+  })
+
+  /**
+   * Report whether a candidate port is usable.
+   * @param {number} port - Candidate port.
+   * @returns {Promise<{port: number, free: boolean, current: boolean}>} Availability.
+   */
+  const checkPort = async (port) => {
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('端口必须是 1-65535 的整数')
+    if (port === currentPort()) return { port, free: true, current: true }
+    return { port, free: await probePort(port), current: false }
+  }
+
+  /**
+   * Persist a new port and rebind the page server, restoring the old port on failure.
+   * @param {number} port - Candidate port.
+   * @returns {Promise<object>} Fresh state with the bound URL.
+   */
+  const setPort = async (port) => {
+    const verdict = await checkPort(port)
+    if (!verdict.free) throw new Error(`端口 ${port} 已被占用`)
+    if (verdict.current) return { ...state(), pageUrl: server.url }
+    // Persist first, bind second, swap last: a failed write leaves the running
+    // server untouched, and closing the old server only after the swap keeps this
+    // in-flight response alive (close() waits for it otherwise).
+    const previousPort = config.port
+    config.port = port
+    try {
+      await saveConfig(config)
+    } catch (error) {
+      config.port = previousPort
+      throw new Error(`保存端口失败：${error instanceof Error ? error.message : String(error)}`)
+    }
+    const next = await bind(port).catch(async (error) => {
+      config.port = previousPort
+      await saveConfig(config).catch(() => {})
+      throw new Error(`切换到 ${port} 失败：${error instanceof Error ? error.message : String(error)}`)
+    })
+    const previousServer = server
+    server = next
+    pageUrl = next.url
+    void previousServer?.close()
+    return { ...state(), pageUrl }
+  }
+
   await detectAll()
   syncTools()
 
@@ -153,7 +218,7 @@ export async function apply(ctx, pluginConfig = {}) {
   if (ctx.effect) ctx.effect(() => ctx.tools.register(statusTool))
   else ctx.tools.register(statusTool)
 
-  server = await startPageServer({ port: config.port, update, state, probe, pagePath }).catch((error) => {
+  server = await bind(config.port).catch((error) => {
     ctx.logger?.warn?.('agent-bridge: page server failed to start: %s', error.message)
     return undefined
   })

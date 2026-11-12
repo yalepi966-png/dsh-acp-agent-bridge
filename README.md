@@ -79,10 +79,17 @@ The page writes `~/.dsh/agent-bridge/config.json`:
 
 | Field | Meaning |
 |---|---|
-| `port` | Page port; 0 picks a free port, and a busy port falls back automatically. |
+| `port` | Page port. Edit it in the panel: type a port, **Check** reports whether it is free, **Confirm** persists it and restarts the page service on the new port. The panel follows the new URL automatically. |
 | `enabled` | The switch. Off means no tool is registered. |
 | `command` | CLI path. Empty means "detect by name on `PATH`". |
 | `adapterCommand` / `adapterArgs` | Override the ACP adapter. Empty means "use the bundled adapter". |
+
+### Changing the port
+
+The panel has a **Service port** card: enter a port, press **Check** (binds it once to test), then
+**Confirm**. Confirm saves the value and rebinds the page service in place — no application restart.
+The panel remembers the new base URL, so it reconnects by itself; a browser tab still open on the old
+port must be reopened at the new one.
 
 ## Adding another CLI
 
