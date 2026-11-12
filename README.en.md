@@ -159,6 +159,20 @@ A delegation that produces no streamed output within **30 seconds** is aborted: 
 cancelled, the adapter process is terminated (SIGTERM, then SIGKILL), and the tool returns an error
 instead of hanging. Override the window with the plugin config `firstChunkMs` (milliseconds).
 
+### Dispatched as a subagent
+
+Besides tools, the plugin registers two **SubagentProviders** (`claude` and `codex`). A tool call
+goes through `ctx.subagents.start(provider, …)`, so every delegation is a real subagent run: DSH
+emits its lifecycle events and the **roster shows an independent child agent** instead of a plain
+tool call.
+
+The child is remote (`localAgent` empty): it owns a process and an ACP session, but has no local
+transcript file. The role definition is injected inside the provider, so every entry point gets the
+same preamble.
+
+When the host composes no `subagents` service the tool falls back to calling ACP directly — same
+behavior, but nothing appears in the roster.
+
 ## How it works
 
 ```

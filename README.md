@@ -151,6 +151,17 @@ tag: 审查官
 一次派遣如果 **30 秒**内没有任何流式输出，会被中止：取消 ACP 会话、终止适配器进程（SIGTERM，
 1.5 秒后 SIGKILL），工具返回错误而不是一直挂着。窗口可以用插件配置 `firstChunkMs`（毫秒）调整。
 
+### 作为 Subagent 派遣
+
+插件不只是注册工具，还会向宿主注册两个 **SubagentProvider**（名字就是 `claude` / `codex`）。
+工具被调用时走 `ctx.subagents.start(provider, …)`，因此每次派遣都是一次真正的 subagent 运行：
+DSH 会发出 subagent 生命周期事件，**编队里能看到独立的子 agent**，而不是一次普通的工具调用。
+
+子 agent 是远程运行（`localAgent` 为空）：它有自己的进程和 ACP 会话，但没有本地 transcript 文件。
+角色设定在 provider 内部注入，所以无论从工具还是其他入口派遣，前置角色都一致。
+
+宿主没有 `subagents` 服务时，工具会回退为直接调用 ACP，行为不变但不会出现在编队中。
+
 ## 工作原理
 
 ```

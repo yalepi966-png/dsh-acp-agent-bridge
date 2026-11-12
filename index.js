@@ -6,6 +6,7 @@
  */
 
 import { spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { AGENTS, adapterStatus, detect, installCommand, resolveAdapter } from './lib/agents.mjs'
 import { homedir } from 'node:os'
@@ -40,6 +41,8 @@ function trace(message) {
 export async function apply(ctx, pluginConfig = {}) {
   const config = await loadConfig()
   if (pluginConfig.port !== undefined) config.port = pluginConfig.port
+  const subagentService = () => ctx.get?.('subagents')
+  const registered = new Set()
   const firstChunkMs = Number.isFinite(pluginConfig.firstChunkMs) && pluginConfig.firstChunkMs > 0
     ? pluginConfig.firstChunkMs
     : 30_000
@@ -55,6 +58,64 @@ export async function apply(ctx, pluginConfig = {}) {
   for (const agent of AGENTS) {
     personas.set(agent.id, await readPersona(agent.id))
   }
+
+  /**
+   * Build one ACP-backed subagent provider so delegations appear in the DSH roster.
+   * @param {import('./lib/agents.mjs').AgentStrategy} agent - Strategy entry.
+   * @returns {object} Provider for `ctx.subagents.registerProvider`.
+   */
+  const makeProvider = (agent) => ({
+    name: agent.id,
+    capabilities: { outputSchema: false, depthLimit: false, toolFilter: false, persona: false },
+    inheritsParentContext: false,
+    async start(request) {
+      const entry = config.agents[agent.id]
+      const role = await readPersona(agent.id)
+      const text = request.prompt.map(block => block.type === 'text' ? block.text : '').join('')
+      const adapter = resolveAdapter(agent, entry)
+      if (adapter.command === undefined) {
+        throw new Error(`适配器未安装：${agent.adapter.package}`)
+      }
+      const task = composeTask({ label: role.tag, persona: role.body }, agent.label, text)
+      const outcome = runAcpTask({
+        command: adapter.command,
+        args: adapter.args,
+        cwd: process.cwd(),
+        task,
+        timeoutMs: 240_000,
+        firstChunkMs,
+        signal: request.signal,
+      }).then(result => ({
+        output: [{ type: 'text', text: result.text || '(no output)' }],
+        stopReason: result.stopReason === 'end_turn' ? 'completed' : 'error',
+      })).catch(error => ({
+        output: [{ type: 'text', text: `ACP 调用失败：${error instanceof Error ? error.message : String(error)}` }],
+        stopReason: 'error',
+      }))
+      return {
+        id: randomUUID(),
+        localAgent: undefined,
+        result: outcome,
+        dispose: async () => {},
+      }
+    },
+  })
+
+  /**
+   * Register one provider once its service is available.
+   * @param {object} service - The subagent service.
+   * @param {import('./lib/agents.mjs').AgentStrategy} agent - Strategy entry.
+   * @returns {boolean} Whether the provider is registered.
+   */
+  const ensureProvider = (service, agent) => {
+    if (service === undefined || registered.has(agent.id)) return service !== undefined
+    ctx.effect?.(() => service.registerProvider(makeProvider(agent)))
+    registered.add(agent.id)
+    trace(`registered subagent provider ${agent.id}`)
+    return true
+  }
+
+  for (const agent of AGENTS) ensureProvider(subagentService(), agent)
 
   /**
    * Adapter status for one agent, including any in-flight install.
@@ -126,7 +187,7 @@ export async function apply(ctx, pluginConfig = {}) {
       const wanted = entry.enabled && detection?.available === true && adapterReady
       const existing = disposers.get(agent.id)
       if (wanted && existing === undefined) {
-        const tool = buildTool(agent, config, firstChunkMs, personas.get(agent.id)?.tag ?? '')
+        const tool = buildTool(agent, config, firstChunkMs, personas.get(agent.id)?.tag ?? '', subagentService, ensureProvider)
         const dispose = ctx.effect
           ? ctx.effect(() => ctx.tools.register(tool))
           : ctx.tools.register(tool)
@@ -322,6 +383,8 @@ export async function apply(ctx, pluginConfig = {}) {
  * @param {import('./lib/agents.mjs').AgentStrategy} agent - Strategy entry.
  * @param {ReturnType<import('./lib/store.mjs').defaultConfig>} config - Live config.
  * @param {number} firstChunkMs - First-chunk deadline passed to the ACP runner.
+ * @param {() => ({start: Function} | undefined)} subagentService - Resolves the subagent service.
+ * @param {(service: object, agent: object) => boolean} ensureProvider - Registers this agent's provider once.
  * @returns {object} Raw tool definition.
  */
 /**
@@ -338,7 +401,7 @@ export function composeTask(entry, fallbackLabel, task) {
   return `【角色】你是「${name}」。\n${persona}\n\n【任务】\n${task}`
 }
 
-function buildTool(agent, config, firstChunkMs, roleTag) {
+function buildTool(agent, config, firstChunkMs, roleTag, subagentService, ensureProvider) {
   const entry = config.agents[agent.id]
   const roleName = (roleTag || '').trim() || agent.label
   return {
@@ -363,6 +426,26 @@ function buildTool(agent, config, firstChunkMs, roleTag) {
     },
     timeoutMs: 240_000,
     async execute(args, exec) {
+      // Preferred path: go through the host's subagent seam so the delegation
+      // appears as a real child agent in the roster.
+      const service = subagentService()
+      if (service !== undefined && exec?.agent !== undefined) {
+        try {
+          ensureProvider(service, agent)
+          const run = await service.start(agent.id, {
+            label: roleName,
+            prompt: [{ type: 'text', text: String(args.task) }],
+            parent: exec.agent,
+            signal: exec.signal,
+          })
+          const result = await run.result
+          await run.dispose()
+          const text = (result.output ?? []).map(block => block.type === 'text' ? block.text : '').join('').trim()
+          return { text: text || '(no output)', stopReason: result.stopReason }
+        } catch (error) {
+          trace(`subagent dispatch failed, falling back: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
       try {
         const adapter = resolveAdapter(agent, entry)
         const role = await readPersona(agent.id)
