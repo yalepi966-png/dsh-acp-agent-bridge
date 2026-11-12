@@ -152,7 +152,7 @@
   .port-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; align-items: center; }
 
   .toast {
-    position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 14px) scale(0.98);
+    position: fixed; left: 50%; bottom: 22px; z-index: 9999; transform: translate(-50%, 14px) scale(0.98);
     display: flex; align-items: center; gap: 8px;
     padding: 10px 18px; font-size: 12.5px; font-weight: 600; color: #1f5c3f;
     background: rgba(255, 255, 255, 0.95);
@@ -222,6 +222,7 @@
       </div>
       <div class="top-right">
         <span class="pill" id="overall"><span class="dot"></span><span id="overall-text">加载中</span></span>
+        <span class="status" id="save-state"></span>
         <button class="btn primary" id="save">保存</button>
         <button class="btn" id="probe">重新探测</button>
       </div>
@@ -261,7 +262,7 @@ const toast = (message, tone) => {
   node.classList.toggle('is-error', tone === 'error')
   node.classList.add('show')
   clearTimeout(toast.timer)
-  toast.timer = setTimeout(() => node.classList.remove('show'), 2200)
+  toast.timer = setTimeout(() => node.classList.remove('show'), 2600)
 }
 
 const api = async (path, init) => {
@@ -412,8 +413,22 @@ const renderList = () => {
   document.getElementById('cards').replaceChildren(list)
 }
 
+const seedDraft = () => {
+  if (state === null || openId === null) return
+  const agent = state.agents.find(item => item.id === openId)
+  if (agent === undefined) return
+  if (draft.id === agent.id) return
+  draft = {
+    id: agent.id,
+    command: agent.command || agent.detection.path || '',
+    tag: agent.roleLabel || '',
+    persona: agent.persona || '',
+  }
+}
+
 const render = () => {
   if (state === null) return
+  seedDraft()
   renderHeader()
   renderList()
 }
@@ -426,6 +441,11 @@ const load = async () => {
   } catch (error) {
     document.getElementById('config-path').textContent = `读取失败：${error.message}`
   }
+}
+
+const payloadFor = (agent, draftValue) => {
+  const keepAuto = agent.command === '' && draftValue.command === (agent.detection.path || '')
+  return { command: keepAuto ? '' : draftValue.command, tag: draftValue.tag, persona: draftValue.persona }
 }
 
 const save = async (id, patch) => {
@@ -471,8 +491,15 @@ document.getElementById('port-apply').onclick = async () => {
 }
 
 document.getElementById('save').onclick = async () => {
-  if (openId === null) return
-  await save(openId, { command: draft.command, tag: draft.tag, persona: draft.persona })
+  const target = openId ?? state?.agents?.[0]?.id ?? null
+  if (target === null) return
+  const agent = state.agents.find(item => item.id === target)
+  if (agent === undefined) return
+  const node = document.getElementById('save-state')
+  node.textContent = '保存中…'
+  await save(target, payloadFor(agent, draft))
+  node.textContent = '已保存'
+  setTimeout(() => { node.textContent = '' }, 1600)
 }
 
 document.getElementById('probe').onclick = async (event) => {
