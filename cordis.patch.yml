@@ -1,0 +1,5 @@
+# Inserted by `dsh plugin --profile <name> add dsh-acp-agent-bridge` (or by hand).
+# The row stays inert until an agent is toggled on in the plugin's local page.
+- insert:
+    - id: agent-bridge
+      name: 'dsh-acp-agent-bridge'

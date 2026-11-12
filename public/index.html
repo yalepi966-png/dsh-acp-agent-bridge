@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>外部 Agent 桥</title>
+<style>
+  :root { color-scheme: light dark; --line: #d8dbe0; --muted: #6b7280; --ok: #177245; --bad: #b42318; }
+  @media (prefers-color-scheme: dark) { :root { --line: #34383f; --muted: #9aa1ab; --ok: #4ade80; --bad: #f87171; } }
+  body { font: 14px/1.6 -apple-system, "PingFang SC", "Segoe UI", sans-serif; margin: 0; padding: 28px; max-width: 880px; margin-inline: auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 22px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+  .row { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+  .name { font-weight: 600; }
+  .badge { font-size: 12px; color: var(--muted); }
+  .badge.ok { color: var(--ok); }
+  .badge.bad { color: var(--bad); }
+  .field { margin-top: 12px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  input[type=text] { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: inherit; font: inherit; }
+  .actions { margin-top: 12px; display: flex; gap: 8px; }
+  button { padding: 6px 13px; border-radius: 7px; border: 1px solid var(--line); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+  button.primary { border-color: var(--ok); color: var(--ok); }
+  .switch { position: relative; width: 44px; height: 24px; border-radius: 999px; border: 1px solid var(--line); background: transparent; cursor: pointer; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); transition: transform .15s ease, background .15s ease; }
+  .switch[data-on="true"] { border-color: var(--ok); }
+  .switch[data-on="true"]::after { transform: translateX(20px); background: var(--ok); }
+  .hint { margin-top: 8px; font-size: 12px; color: var(--muted); word-break: break-all; }
+  .toast { position: fixed; right: 20px; bottom: 20px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: Canvas; opacity: 0; transition: opacity .2s; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <h1>外部 Agent 桥</h1>
+  <div class="sub" id="sub">加载中…</div>
+  <div id="cards"></div>
+  <div class="actions"><button id="probe">全部重新探测</button></div>
+  <div class="toast" id="toast"></div>
+
+<script>
+const toast = (message) => {
+  const node = document.getElementById('toast')
+  node.textContent = message
+  node.classList.add('show')
+  clearTimeout(toast.timer)
+  toast.timer = setTimeout(() => node.classList.remove('show'), 1800)
+}
+
+const render = (state) => {
+  document.getElementById('sub').textContent = `配置文件：${state.configPath}${state.pageUrl ? ' · ' + state.pageUrl : ''}`
+  const root = document.getElementById('cards')
+  root.replaceChildren(...state.agents.map((agent) => {
+    const card = document.createElement('div')
+    card.className = 'card'
+
+    const head = document.createElement('div')
+    head.className = 'row'
+    const name = document.createElement('div')
+    name.className = 'name'
+    name.textContent = agent.label
+    const badge = document.createElement('span')
+    badge.className = 'badge ' + (agent.detection.available ? 'ok' : 'bad')
+    badge.textContent = agent.detection.available
+      ? `可用 · ${agent.detection.version || ''}`
+      : `不可用 · ${agent.detection.reason || '未探测'}`
+    const toggle = document.createElement('button')
+    toggle.className = 'switch'
+    toggle.dataset.on = String(agent.enabled)
+    toggle.title = agent.enabled ? '已启用' : '已停用'
+    toggle.onclick = () => save(agent.id, { enabled: !agent.enabled })
+    head.append(name, badge, toggle)
+
+    const pathField = document.createElement('div')
+    pathField.className = 'field'
+    const pathLabel = document.createElement('label')
+    pathLabel.textContent = `CLI 路径（留空则按 ${agent.effectiveCommand} 自动探测）`
+    const pathInput = document.createElement('input')
+    pathInput.type = 'text'
+    pathInput.value = agent.command
+    pathInput.placeholder = agent.effectiveCommand
+    pathField.append(pathLabel, pathInput)
+
+    const hint = document.createElement('div')
+    hint.className = 'hint'
+    hint.textContent = `ACP 适配器：${agent.adapterPackage} · 工具 ${agent.registered ? '已注册' : '未注册'}`
+    hint.title = `${agent.adapterCommand} ${agent.adapterArgs.join(' ')}`
+
+    const actions = document.createElement('div')
+    actions.className = 'actions'
+    const saveButton = document.createElement('button')
+    saveButton.className = 'primary'
+    saveButton.textContent = '保存'
+    saveButton.onclick = () => save(agent.id, { command: pathInput.value })
+    actions.append(saveButton)
+
+    card.append(head, pathField, hint, actions)
+    return card
+  }))
+}
+
+const apply = (state) => render(state)
+
+const save = async (id, patch) => {
+  const response = await fetch(`/api/agents/${id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) })
+  const body = await response.json()
+  if (!response.ok) { toast(body.error || '保存失败'); return }
+  apply(body)
+  toast('已保存')
+}
+
+const probe = async () => {
+  const body = await (await fetch('/api/probe', { method: 'POST' })).json()
+  apply(body)
+  toast('探测完成')
+}
+
+document.getElementById('probe').onclick = probe
+fetch('/api/state').then((r) => r.json()).then(apply).catch((error) => { document.getElementById('sub').textContent = String(error) })
+</script>
+</body>
+</html>
