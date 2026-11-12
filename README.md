@@ -112,6 +112,12 @@ Edit `lib/agents.mjs`:
 Detection, registration, the page, and dispatch all pick it up. The CLI needs an ACP adapter;
 this plugin intentionally has no "raw CLI" fallback, so there is only one dispatch semantics.
 
+### First-token deadline
+
+A delegation that produces no streamed output within **30 seconds** is aborted: the ACP session is
+cancelled, the adapter process is terminated (SIGTERM, then SIGKILL), and the tool returns an error
+instead of hanging. Override the window with the plugin config `firstChunkMs` (milliseconds).
+
 ## How it works
 
 ```

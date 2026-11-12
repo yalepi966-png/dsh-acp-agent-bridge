@@ -39,6 +39,9 @@ function trace(message) {
 export async function apply(ctx, pluginConfig = {}) {
   const config = await loadConfig()
   if (pluginConfig.port !== undefined) config.port = pluginConfig.port
+  const firstChunkMs = Number.isFinite(pluginConfig.firstChunkMs) && pluginConfig.firstChunkMs > 0
+    ? pluginConfig.firstChunkMs
+    : 30_000
   const detections = new Map()
   const pagePath = fileURLToPath(new URL('./public/index.html', import.meta.url))
   const disposers = new Map()
@@ -117,7 +120,7 @@ export async function apply(ctx, pluginConfig = {}) {
       const wanted = entry.enabled && detection?.available === true && adapterReady
       const existing = disposers.get(agent.id)
       if (wanted && existing === undefined) {
-        const tool = buildTool(agent, config)
+        const tool = buildTool(agent, config, firstChunkMs)
         const dispose = ctx.effect
           ? ctx.effect(() => ctx.tools.register(tool))
           : ctx.tools.register(tool)
@@ -295,9 +298,10 @@ export async function apply(ctx, pluginConfig = {}) {
  * Build the ACP-dispatched tool for one agent.
  * @param {import('./lib/agents.mjs').AgentStrategy} agent - Strategy entry.
  * @param {ReturnType<import('./lib/store.mjs').defaultConfig>} config - Live config.
+ * @param {number} firstChunkMs - First-chunk deadline passed to the ACP runner.
  * @returns {object} Raw tool definition.
  */
-function buildTool(agent, config) {
+function buildTool(agent, config, firstChunkMs) {
   const entry = config.agents[agent.id]
   return {
     name: `ask_${agent.id}`,
@@ -328,6 +332,7 @@ function buildTool(agent, config) {
           cwd: process.cwd(),
           task: String(args.task),
           timeoutMs: 240_000,
+          firstChunkMs,
           signal: exec?.signal,
         })
         return { text: result.text || '(no output)', stopReason: result.stopReason }
