@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>外部 Agent 桥</title>
+<title>Agent Bridge</title>
 <style>
   :root {
     color-scheme: light;
-    --ink: #3f4a63;
-    --ink-soft: #6b7488;
-    --ink-faint: #98a1b3;
+    --ink: #2f3a50;
+    --ink-soft: #4f5b70;
+    --ink-faint: #6b7688;
     --glass: rgba(255, 255, 255, 0.6);
     --glass-strong: rgba(255, 255, 255, 0.78);
     --line: rgba(255, 255, 255, 0.85);
@@ -104,17 +104,17 @@
   .summary { margin: 4px 0 0; font-size: 11px; color: var(--ink-soft); overflow-wrap: anywhere; }
 
   .field { margin-top: 8px; display: grid; gap: 3px; }
-  .label { font-size: 10.5px; color: var(--ink-faint); letter-spacing: 0.02em; }
+  .label { font-size: 10.5px; color: var(--ink-soft); letter-spacing: 0.02em; }
   .input {
     width: 100%; min-width: 0; padding: 6px 9px; font: inherit; font-size: 11.5px; color: var(--ink);
-    background: var(--glass-strong); border: 1px solid var(--line-soft);
+    background: #ffffff; border: 1px solid rgba(176, 192, 214, 0.75);
     border-radius: 10px; outline: none;
     transition: border-color 0.18s ease, box-shadow 0.18s ease;
   }
   .input::placeholder { color: #b3bbc9; }
   .input:focus { border-color: #b9d4f6; box-shadow: 0 0 0 3px rgba(185, 212, 246, 0.26); }
 
-  .hint { margin: 0; font-size: 10px; line-height: 1.5; color: var(--ink-faint); overflow-wrap: anywhere; }
+  .hint { margin: 0; font-size: 10px; line-height: 1.5; color: var(--ink-soft); overflow-wrap: anywhere; }
 
   .adapter {
     display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
@@ -168,7 +168,16 @@
   }
   .agent-row:hover { background: rgba(255, 255, 255, .45); }
   .agent-item.is-open .agent-row { border-bottom: 1px solid var(--line-soft); }
-  .agent-body { display: grid; padding: 9px 12px 12px; }
+  .agent-body {
+    display: grid; padding: 10px 12px 12px;
+    background: linear-gradient(180deg, #e7f0fb, #f2f7fd);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  }
+  .agent-item.is-open {
+    border-color: rgba(146, 174, 210, 0.85);
+    box-shadow: 0 12px 28px rgba(84, 104, 142, 0.16);
+  }
+  .agent-item.is-open .agent-row { background: rgba(255, 255, 255, 0.7); }
   .row-name { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
   .row-name strong { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row-tag { font-size: 9.5px; color: var(--ink-faint); white-space: nowrap; }
@@ -193,7 +202,7 @@
   <main class="page">
     <header class="top">
       <div>
-        <h1>外部 Agent 桥</h1>
+        <h1>Agent Bridge</h1>
         <p class="sub" id="config-path">正在读取配置…</p>
       </div>
       <div class="top-right">
