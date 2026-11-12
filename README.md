@@ -1,72 +1,67 @@
 # dsh-acp-agent-bridge
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+[English](README.en.md) | [简体中文](README.md)
 
-A DeepSeek Harness plugin that turns locally installed coding-agent CLIs into ACP-dispatched
-tools. It detects Claude Code and Codex on your machine, exposes each one behind a switch,
-and lets the agent delegate a self-contained task to it over the
-[Agent Client Protocol](https://agentclientprotocol.com/).
+一个 DeepSeek Harness 插件：把本机安装的编程 Agent CLI 变成可被 ACP 派遣的工具。自动探测
+Claude Code 与 Codex，每个都用一个开关控制，打开后 Agent 就能把一个自包含任务交给它执行。
 
-![Configuration page](docs/preview.png)
+![配置页面](docs/preview.png)
 
-## Features
+## 特性
 
-- **Auto-detection with manual fallback** — scans `PATH` and verifies `<cli> --version`; if a CLI
-  is installed somewhere unusual, type its absolute path on the page and it re-probes immediately.
-- **Per-agent switch** — a disabled agent registers no tool at all; the model never sees it.
-- **ACP dispatch** — each delegation spawns the CLI's ACP adapter, runs one `initialize` →
-  `newSession` → `prompt` cycle, and returns the final answer. No shell scraping, no `--print` parsing.
-- **CLI-identified results** — tools are named `ask_claude` / `ask_codex`, so a transcript shows
-  exactly which agent did the work.
-- **Strategy registry** — adding another CLI is one entry in `lib/agents.mjs`.
-- **In-app panel** — the same controls appear in the DSH sidebar (bottom-left row
-  "External Agents"), served by the plugin's browser half; the standalone page at
-  `http://127.0.0.1:4319` remains available for use without the GUI.
+- **自动探测 + 手动兜底**：扫描 `PATH` 并执行 `<cli> --version` 验证；装在奇怪位置时，在页面上填
+  绝对路径即可，保存后立即重探。
+- **每个 Agent 一个开关**：关闭时不注册任何工具，模型完全看不到。
+- **ACP 派遣**：每次调用会 spawn 对应 CLI 的 ACP 适配器，走一遍
+  `initialize → newSession → prompt`，直接拿最终回答，不解析 `--print` 的文本。
+- **按 CLI 名识别**：工具名是 `ask_claude` / `ask_codex`，会话记录里一眼看出派给了谁。
+- **策略表**：新增一个 CLI 只需在 `lib/agents.mjs` 加一项。
+- **应用内面板**：同一套控件也挂在 DSH 左侧栏底部（「外部 Agent」一行），由插件的浏览器端提供；
+  独立页面 `http://127.0.0.1:4319` 保留，用于不开 GUI 的场景。
 
-## Requirements
+## 依赖
 
-| Requirement | Notes |
+| 依赖 | 说明 |
 |---|---|
-| DeepSeek Harness | The host. The plugin uses only `ctx.tools`, `ctx.effect`, `ctx.logger`. |
-| Claude Code CLI | Optional. Must be installed and logged in to use `ask_claude`. |
-| Codex CLI | Optional. Must be installed and logged in to use `ask_codex`. |
-| Node.js | Not needed separately — adapters start on the host's own Node. |
-| ACP adapters | Installed on demand from the panel; pinned versions ship inside the plugin. |
+| DeepSeek Harness | 宿主；插件只用 `ctx.tools` / `ctx.effect` / `ctx.logger` |
+| Claude Code CLI | 可选；要用 `ask_claude` 就必须装好并登录 |
+| Codex CLI | 可选；要用 `ask_codex` 就必须装好并登录 |
+| Node.js | 不需要单独装，适配器用宿主自带 Node 启动 |
+| ACP 适配器 | 在面板里按需安装；版本由插件内部固定 |
 
-## Install
+## 安装
 
 ```sh
-# from npm (once published)
+# 从 npm（发布后）
 dsh plugin --profile desktop add dsh-acp-agent-bridge
 
-# or straight from GitHub
+# 或直接从 GitHub 装
 dsh plugin --profile desktop add github:yalepi966-png/dsh-acp-agent-bridge
 ```
 
-The package declares `dsh.bundle.patch`, so the plugin row is inserted into the profile
-automatically — you do not edit `cordis.patch.yml` by hand. Restart DeepSeek Harness afterwards.
+包内声明了 `dsh.bundle.patch`，`dsh plugin add` 会自动把插件行插进 profile 组合，**不用手改
+`cordis.patch.yml`**。装完重启 DeepSeek Harness。
 
-> **Install it as a bundle, not by hand.** Adding the row manually to the profile's
-> `cordis.patch.yml` registers the host tools but **not** the sidebar entry: the client module
-> registry only composes browser bundles for profile-bundle layers. `dsh plugin add` is the
-> supported path.
+> **必须用 bundle 方式安装，不要手动插条目。** 手写进 profile 的 `cordis.patch.yml` 只会注册宿主
+> 工具，**侧栏入口不会出现**：客户端模块注册表只为 profile bundle 层组合浏览器 bundle。
+> `dsh plugin add` 是唯一受支持的路径。
 
-## Usage
+## 使用
 
-1. Open the panel from the DSH sidebar (bottom-left **External Agents** row), or open
-   `http://127.0.0.1:4319` in a browser. The panel and the standalone page edit the same config;
-   the browser copy needs the plugin's page server, whose URL the log and `agent_bridge_status` report.
-2. Check the status badge. `Unavailable` shows the reason — fill in the CLI path if detection failed.
-3. Flip the switch on for the agents you want, then **Save**.
-4. Ask the agent to delegate, or call the tool directly:
+1. 从 DSH 左侧栏底部点「外部 Agent」打开面板，或在浏览器打开 `http://127.0.0.1:4319`。
+   两个入口改的是同一份配置；浏览器入口依赖插件起的页面服务，端口被占会自动换一个，
+   实际地址在日志里，也会由 `agent_bridge_status` 工具返回。
+2. 看状态徽标。`不可用` 会写明原因，探测失败就在路径框里填绝对路径。
+3. 打开需要的开关，点 **保存**。
+4. 让 Agent 派遣，或直接调用：
 
 ```
-ask_claude: "Review src/server.mjs for concurrency bugs and reply with a numbered list."
+ask_claude: "审一下 src/server.mjs 的并发问题，用编号列表回答。"
 ```
 
-## Configuration
+## 配置
 
-The page writes `~/.dsh/agent-bridge/config.json`:
+页面写入 `~/.dsh/agent-bridge/config.json`：
 
 ```json
 {
@@ -82,78 +77,75 @@ The page writes `~/.dsh/agent-bridge/config.json`:
 }
 ```
 
-| Field | Meaning |
+| 字段 | 含义 |
 |---|---|
-| `port` | Page port. Edit it in the panel: type a port, **Check** reports whether it is free, **Confirm** persists it and restarts the page service on the new port. The panel follows the new URL automatically. |
-| `enabled` | The switch. Off means no tool is registered. |
-| `command` | CLI path. Empty means "detect by name on `PATH`". |
-| `adapterCommand` / `adapterArgs` | Override the ACP adapter. Empty means "use the bundled adapter". |
+| `port` | 页面端口。在面板里改：填端口 → **检测** 报告是否空闲 → **确定** 保存并在新端口重启页面服务，面板会自动跟过去 |
+| `enabled` | 开关；关闭即不注册工具 |
+| `command` | CLI 路径；留空表示按名字在 `PATH` 上探测 |
+| `adapterCommand` / `adapterArgs` | 覆盖 ACP 适配器；留空表示用包内自带的 |
 
-### Changing the port
+### 修改端口
 
-The panel has a **Service port** card: enter a port, press **Check** (binds it once to test), then
-**Confirm**. Confirm saves the value and rebinds the page service in place — no application restart.
-The panel remembers the new base URL, so it reconnects by itself; a browser tab still open on the old
-port must be reopened at the new one.
+面板顶部有一张「服务端口」卡：填端口 → 点 **检测**（会真的试绑一次）→ 点 **确定**。确定会保存配置并在
+原插件内重启页面服务，不需要重启应用。面板会记住新的地址自动重连；如果旧端口的浏览器标签页还开着，
+需要在新端口重新打开。
 
-## Adding another CLI
+## 新增一个 CLI
 
-Edit `lib/agents.mjs`:
+编辑 `lib/agents.mjs`：
 
 ```js
 {
-  id: 'gemini',                          // also the tool suffix: ask_gemini
+  id: 'gemini',                          // 同时是工具名后缀 ask_gemini
   label: 'Gemini CLI',
   bin: 'gemini',
   adapter: { package: '@agentclientprotocol/gemini-acp', bin: 'gemini-acp' },
 }
 ```
 
-Detection, registration, the page, and dispatch all pick it up. The CLI needs an ACP adapter;
-this plugin intentionally has no "raw CLI" fallback, so there is only one dispatch semantics.
+探测、注册、页面、派遣都会自动跟上。前提是该 CLI 有 ACP 适配器；本插件故意不做“直调 CLI”兜底，
+避免两套派遣语义并存。
 
-### First-token deadline
+### 首字超时
 
-A delegation that produces no streamed output within **30 seconds** is aborted: the ACP session is
-cancelled, the adapter process is terminated (SIGTERM, then SIGKILL), and the tool returns an error
-instead of hanging. Override the window with the plugin config `firstChunkMs` (milliseconds).
+一次派遣如果 **30 秒**内没有任何流式输出，会被中止：取消 ACP 会话、终止适配器进程（SIGTERM，
+1.5 秒后 SIGKILL），工具返回错误而不是一直挂着。窗口可以用插件配置 `firstChunkMs`（毫秒）调整。
 
-## How it works
+## 工作原理
 
 ```
-DSH agent
+DSH Agent
   └─ ask_claude(task)
-       └─ ACP client (lib/acp.mjs)
-            └─ @agentclientprotocol/claude-agent-acp   (spawned)
-                 └─ claude CLI → your model backend
+       └─ ACP 客户端 (lib/acp.mjs)
+            └─ @agentclientprotocol/claude-agent-acp   (子进程)
+                 └─ claude CLI → 你的模型后端
 ```
 
-The child gets the task text only. No conversation history crosses the boundary, and each call is
-a fresh process.
+子进程只拿到任务文本，不继承父会话历史；每次调用都是一个全新进程。
 
-## Security
+## 安全
 
-- The page binds `127.0.0.1` and has no authentication. Do not expose the port.
-- Whatever executable path you type on the page will be spawned. Only point it at software you trust.
-- Permission requests from the adapter are answered automatically (first "allow" option).
+- 页面只绑 `127.0.0.1` 且没有鉴权，不要把端口暴露出去。
+- 你在页面上填的任意可执行路径都会被启动，只指向你信任的程序。
+- 适配器发来的权限请求会被自动批准（选第一个 allow 选项）。
 
-## Limitations
+## 限制
 
-- **Tool-level delegation** — the work happens in a child process, not a DSH child session in the
-  session tree. A real `SubagentProvider` is the next step.
-- **Single turn** — no multi-turn memory between calls; put the context in the task text.
-- **Tested on macOS arm64 only** — the code handles Windows `PATHEXT` and starts adapters through
-  `node <js>`, but other platforms have not been verified.
-- **Adapters are ~770 MB when installed** — almost entirely the two vendors' platform binaries. The
-  plugin package itself stays small; the cost is paid once, per adapter, on the card's Install button.
+- **工具级派遣**：任务跑在子进程里，不是会话树中的 child session。真正的
+  `SubagentProvider` 是下一步。
+- **单轮无状态**：调用之间没有多轮记忆，上下文要写进任务文本。
+- **只在 macOS arm64 上测过**：代码处理了 Windows 的 `PATHEXT`，适配器也统一用
+  `node <js>` 启动，但其他平台没有实机验证。
+- **装好适配器后约 770MB**：几乎全是两家的平台二进制。插件包本身很小，这部分只在点“安装”时
+  按需下载，装一次即可。
 
-## Development
+## 开发
 
 ```sh
-node serve.mjs          # page only, no DSH host, for UI work
-node --check index.js   # syntax
+node serve.mjs          # 只起页面，不需要 DSH 宿主，方便调 UI
+node --check index.js   # 语法检查
 ```
 
-## License
+## 许可证
 
 [MIT](LICENSE)
