@@ -156,15 +156,19 @@
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
   .agent-list { grid-column: 1 / -1; display: grid; gap: 6px; }
+  .agent-item {
+    background: var(--glass); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: var(--shadow); overflow: hidden;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  }
   .agent-row {
     display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto;
     align-items: center; gap: 8px; padding: 8px 11px;
-    background: var(--glass); border: 1px solid var(--line); border-radius: 12px;
-    box-shadow: var(--shadow); cursor: pointer;
-    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-    transition: transform .14s ease, box-shadow .14s ease;
+    cursor: pointer; transition: background .14s ease;
   }
-  .agent-row:hover { transform: translateY(-1px); box-shadow: 0 12px 26px rgba(120, 132, 160, .16); }
+  .agent-row:hover { background: rgba(255, 255, 255, .45); }
+  .agent-item.is-open .agent-row { border-bottom: 1px solid var(--line-soft); }
+  .agent-body { display: grid; padding: 9px 12px 12px; }
   .row-name { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
   .row-name strong { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row-tag { font-size: 9.5px; color: var(--ink-faint); white-space: nowrap; }
@@ -223,7 +227,7 @@
 
 <script>
 let state = null
-let selected = null
+let openId = null
 
 const toast = (message) => {
   const node = document.getElementById('toast')
@@ -268,24 +272,7 @@ const renderHeader = () => {
   const ready = state.agents.filter(a => a.enabled && a.detection.available && a.adapter.ready)
   document.getElementById('overall').classList.toggle('is-off', ready.length === 0)
   document.getElementById('overall-text').textContent = ready.length > 0 ? `已启用 ${ready.length} 个` : '未启用'
-  document.getElementById('port-card').style.display = selected === null ? '' : 'none'
-}
-
-const renderList = () => {
-  const list = el('div', 'agent-list')
-  for (const agent of state.agents) {
-    const status = statusOf(agent)
-    const row = el('div', 'agent-row')
-    row.onclick = () => { selected = agent.id; render() }
-
-    const name = el('div', 'row-name')
-    name.append(el('strong', null, agent.label))
-    if (agent.roleLabel) name.append(el('span', 'row-tag', agent.cliLabel))
-
-    row.append(name, el('span', `chip ${status.cls}`, status.text), switchEl(agent), el('span', 'chev', '›'))
-    list.append(row)
-  }
-  document.getElementById('cards').replaceChildren(list)
+  document.getElementById('port-card').style.display = ''
 }
 
 const adapterBlock = (agent) => {
@@ -324,31 +311,22 @@ const adapterBlock = (agent) => {
   return wrap
 }
 
-const renderDetail = () => {
-  const agent = state.agents.find(a => a.id === selected)
-  if (agent === undefined) { selected = null; return render() }
-  const status = statusOf(agent)
-  const card = el('section', 'card detail')
+const agentBody = (agent) => {
+  const body = el('div', 'agent-body')
 
-  const head = el('div', 'detail-head')
-  const back = el('button', 'btn small', '‹ 返回')
-  back.onclick = () => { selected = null; render() }
-  head.append(back, el('strong', null, agent.label), el('span', `chip ${status.cls}`, status.text), switchEl(agent))
-
-  const summary = el('p', 'summary', !agent.detection.available
+  body.append(el('p', 'summary', !agent.detection.available
     ? `没有找到可用的 CLI：${agent.detection.reason || '未知原因'}`
     : !agent.adapter.ready
       ? 'CLI 已就绪，但还缺 ACP 适配器，安装后才能启用。'
-      : `模型可以用 ask_${agent.id} 把任务派给它。`)
-  const meta = el('p', 'hint', `${agent.cliLabel}${agent.detection.version ? ` · ${agent.detection.version}` : ''} · ${agent.personaPath}`)
+      : `模型可以用 ask_${agent.id} 把任务派给它。`))
+  body.append(el('p', 'hint', `${agent.cliLabel}${agent.detection.version ? ` · ${agent.detection.version}` : ''} · ${agent.personaPath}`))
 
   const pathField = el('div', 'field')
   pathField.append(el('label', 'label', agent.command === '' ? 'CLI 路径（自动探测）' : 'CLI 路径（手动指定）'))
   const pathInput = el('input', 'input')
   pathInput.value = agent.command || agent.detection.path || ''
   pathInput.placeholder = agent.effectiveCommand
-  pathField.append(pathInput)
-  pathField.append(adapterBlock(agent))
+  pathField.append(pathInput, adapterBlock(agent))
 
   const tagField = el('div', 'role-row')
   tagField.append(el('span', 'label', '角色标签'))
@@ -359,36 +337,56 @@ const renderDetail = () => {
   tagField.append(tagInput)
 
   const personaField = el('div', 'field')
-  const personaLabel = el('label', 'label', '角色设定（派遣时作为前置角色注入）')
   const counter = el('span', 'counter', `0 / ${agent.personaMaxChars}`)
+  personaField.append(el('label', 'label', '角色设定（派遣时作为前置角色注入）'), counter)
   const persona = el('textarea', 'input')
-  persona.rows = 6
+  persona.rows = 5
   persona.value = agent.persona || ''
   persona.placeholder = '写清楚：你是谁、关注什么、输出格式是什么。'
   const syncCounter = () => { counter.textContent = `${persona.value.length} / ${agent.personaMaxChars}` }
   persona.oninput = syncCounter
   syncCounter()
-  personaField.append(personaLabel, counter, persona)
+  personaField.append(persona)
 
   const actions = el('div', 'actions')
   const saveButton = el('button', 'btn primary', '保存')
   saveButton.onclick = () => save(agent.id, { command: pathInput.value, tag: tagInput.value, persona: persona.value })
-  actions.append(saveButton, el('span', 'hint', '保存后下一次派遣立即生效，无需重启。'))
+  actions.append(saveButton, el('span', 'hint', '保存后下一次派遣立即生效'))
 
-  card.append(head, summary, meta, pathField, tagField, personaField, actions)
-  document.getElementById('cards').replaceChildren(card)
+  body.append(pathField, tagField, personaField, actions)
+  return body
+}
+
+const renderList = () => {
+  const list = el('div', 'agent-list')
+  for (const agent of state.agents) {
+    const status = statusOf(agent)
+    const open = openId === agent.id
+    const item = el('section', `agent-item${open ? ' is-open' : ''}`)
+
+    const row = el('div', 'agent-row')
+    row.onclick = () => { openId = open ? null : agent.id; render() }
+    const name = el('div', 'row-name')
+    name.append(el('strong', null, agent.label))
+    if (agent.roleLabel) name.append(el('span', 'row-tag', agent.cliLabel))
+    row.append(name, el('span', `chip ${status.cls}`, status.text), switchEl(agent), el('span', 'chev', open ? '▾' : '▸'))
+    item.append(row)
+    if (open) item.append(agentBody(agent))
+    list.append(item)
+  }
+  document.getElementById('cards').replaceChildren(list)
 }
 
 const render = () => {
   if (state === null) return
   renderHeader()
-  if (selected === null) renderList()
-  else renderDetail()
+  renderList()
 }
 
 const load = async () => {
   try {
     state = await api('/api/state')
+    if (openId === null && state.agents.length > 0) openId = state.agents[0].id
     render()
   } catch (error) {
     document.getElementById('config-path').textContent = `读取失败：${error.message}`
@@ -450,7 +448,7 @@ document.getElementById('probe').onclick = async (event) => {
 }
 
 const deepLink = new URLSearchParams(location.search).get('agent')
-if (deepLink) selected = deepLink
+if (deepLink) openId = deepLink
 load()
 </script>
 </body>

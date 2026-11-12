@@ -115,8 +115,9 @@ this plugin intentionally has no "raw CLI" fallback, so there is only one dispat
 
 ### Role label and role definition
 
-Click any row to open its detail view and edit the **role label** (≤10 characters) and the
-**role definition** (≤2000 characters). Definitions are not stored in config; each agent gets a
+The list is an accordion: click a row header to expand or collapse it; the first agent starts
+expanded. Inside, edit the **role label** (≤10 characters) and the **role definition**
+(≤2000 characters). Definitions are not stored in config; each agent gets a
 Markdown file:
 
 ```
@@ -151,8 +152,6 @@ The definition is prepended to the task:
 
 With no definition the task is sent unchanged. Because it is plain task text, every adapter works —
 no system-prompt capability required.
-
-![Detail view](docs/detail.png)
 
 ### First-token deadline
 
