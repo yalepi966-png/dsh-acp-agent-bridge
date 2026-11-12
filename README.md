@@ -19,6 +19,9 @@ and lets the agent delegate a self-contained task to it over the
 - **CLI-identified results** — tools are named `ask_claude` / `ask_codex`, so a transcript shows
   exactly which agent did the work.
 - **Strategy registry** — adding another CLI is one entry in `lib/agents.mjs`.
+- **In-app panel** — the same controls appear in the DSH sidebar (bottom-left row
+  "External Agents"), served by the plugin's browser half; the standalone page at
+  `http://127.0.0.1:4319` remains available for use without the GUI.
 
 ## Requirements
 
@@ -45,8 +48,9 @@ automatically — you do not edit `cordis.patch.yml` by hand. Restart DeepSeek H
 
 ## Usage
 
-1. Open `http://127.0.0.1:4319` (if the port is busy the plugin picks another one; the real URL is
-   printed in the log and returned by the `agent_bridge_status` tool).
+1. Open the panel from the DSH sidebar (bottom-left **External Agents** row), or open
+   `http://127.0.0.1:4319` in a browser. The panel and the standalone page edit the same config;
+   the browser copy needs the plugin's page server, whose URL the log and `agent_bridge_status` report.
 2. Check the status badge. `Unavailable` shows the reason — fill in the CLI path if detection failed.
 3. Flip the switch on for the agents you want, then **Save**.
 4. Ask the agent to delegate, or call the tool directly:

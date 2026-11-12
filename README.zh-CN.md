@@ -16,6 +16,8 @@ Claude Code 与 Codex，每个都用一个开关控制，打开后 Agent 就能�
   `initialize → newSession → prompt`，直接拿最终回答，不解析 `--print` 的文本。
 - **按 CLI 名识别**：工具名是 `ask_claude` / `ask_codex`，会话记录里一眼看出派给了谁。
 - **策略表**：新增一个 CLI 只需在 `lib/agents.mjs` 加一项。
+- **应用内面板**：同一套控件也挂在 DSH 左侧栏底部（「外部 Agent」一行），由插件的浏览器端提供；
+  独立页面 `http://127.0.0.1:4319` 保留，用于不开 GUI 的场景。
 
 ## 依赖
 
@@ -42,8 +44,9 @@ dsh plugin --profile desktop add github:yalepi966-png/dsh-acp-agent-bridge
 
 ## 使用
 
-1. 打开 `http://127.0.0.1:4319`（端口被占会自动换一个，实际地址在日志里，也会由
-   `agent_bridge_status` 工具返回）。
+1. 从 DSH 左侧栏底部点「外部 Agent」打开面板，或在浏览器打开 `http://127.0.0.1:4319`。
+   两个入口改的是同一份配置；浏览器入口依赖插件起的页面服务，端口被占会自动换一个，
+   实际地址在日志里，也会由 `agent_bridge_status` 工具返回。
 2. 看状态徽标。`不可用` 会写明原因，探测失败就在路径框里填绝对路径。
 3. 打开需要的开关，点 **保存**。
 4. 让 Agent 派遣，或直接调用：
