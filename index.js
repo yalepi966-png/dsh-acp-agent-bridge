@@ -5,8 +5,9 @@
  * @module @local/dsh-agent-bridge
  */
 
+import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { AGENTS, detect, resolveAdapter } from './lib/agents.mjs'
+import { AGENTS, adapterStatus, detect, installCommand, resolveAdapter } from './lib/agents.mjs'
 import { homedir } from 'node:os'
 import { loadConfig, saveConfig, configPath } from './lib/store.mjs'
 import { probePort, startPageServer } from './lib/server.mjs'
@@ -43,6 +44,57 @@ export async function apply(ctx, pluginConfig = {}) {
   const disposers = new Map()
   let server
 
+  /** In-flight adapter installations, keyed by agent id. */
+  const installs = new Map()
+
+  /**
+   * Adapter status for one agent, including any in-flight install.
+   * @param {string} id - Agent id.
+   * @returns {object} Status for the page.
+   */
+  const adapterState = (id) => {
+    const agent = AGENTS.find(candidate => candidate.id === id)
+    if (agent === undefined) throw new Error(`未知 agent: ${id}`)
+    const info = adapterStatus(agent, config.agents[id])
+    return { ...info, install: installs.get(id) ?? null }
+  }
+
+  /**
+   * Run the pinned adapter install in the background and record its outcome.
+   * @param {string} id - Agent id.
+   * @returns {{status: string}} Current install state.
+   */
+  const installAdapter = (id) => {
+    const agent = AGENTS.find(candidate => candidate.id === id)
+    if (agent === undefined) throw new Error(`未知 agent: ${id}`)
+    const current = installs.get(id)
+    if (current?.status === 'installing') return current
+    const already = adapterStatus(agent, config.agents[id])
+    if (already.ready) {
+      installs.set(id, { status: 'done', source: already.source, version: already.version })
+      return installs.get(id)
+    }
+    installs.set(id, { status: 'installing', startedAt: new Date().toISOString() })
+    const { command, args } = installCommand(agent)
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], env: process.env })
+    let tail = ''
+    const collect = (chunk) => { tail = (tail + chunk.toString()).slice(-4000) }
+    child.stdout.on('data', collect)
+    child.stderr.on('data', collect)
+    child.on('error', (error) => {
+      installs.set(id, { status: 'error', error: error.message })
+    })
+    child.on('close', async (code) => {
+      const after = adapterStatus(agent, config.agents[id])
+      installs.set(id, code === 0 && after.ready
+        ? { status: 'done', version: after.version, source: after.source }
+        : { status: 'error', error: `npm 退出码 ${code}`, log: tail })
+      await detectAll()
+      syncTools()
+    })
+    return installs.get(id)
+  }
+
   /**
    * Detect every known agent against its effective command.
    * @returns {Promise<void>} Resolves when every probe settled.
@@ -61,7 +113,8 @@ export async function apply(ctx, pluginConfig = {}) {
     for (const agent of AGENTS) {
       const entry = config.agents[agent.id]
       const detection = detections.get(agent.id)
-      const wanted = entry.enabled && detection?.available === true
+      const adapterReady = adapterStatus(agent, entry).ready
+      const wanted = entry.enabled && detection?.available === true && adapterReady
       const existing = disposers.get(agent.id)
       if (wanted && existing === undefined) {
         const tool = buildTool(agent, config)
@@ -89,6 +142,7 @@ export async function apply(ctx, pluginConfig = {}) {
     agents: AGENTS.map((agent) => {
       const entry = config.agents[agent.id]
       const adapter = resolveAdapter(agent, entry)
+      const adapterInfo = adapterStatus(agent, entry)
       return {
         id: agent.id,
         label: agent.label,
@@ -98,6 +152,13 @@ export async function apply(ctx, pluginConfig = {}) {
         adapterCommand: adapter.command,
         adapterArgs: adapter.args,
         adapterPackage: agent.adapter.package,
+        adapter: {
+          ready: adapterInfo.ready,
+          source: adapterInfo.source,
+          version: adapterInfo.version ?? null,
+          pinned: adapterInfo.pinned,
+          install: installs.get(agent.id) ?? null,
+        },
         detection: detections.get(agent.id) ?? { available: false, reason: '尚未探测' },
         registered: disposers.has(agent.id),
       }
@@ -154,6 +215,8 @@ export async function apply(ctx, pluginConfig = {}) {
     port, update, state, probe, pagePath,
     checkPort: (candidate) => checkPort(candidate),
     setPort: (candidate) => setPort(candidate),
+    adapterState,
+    installAdapter,
   })
 
   /**

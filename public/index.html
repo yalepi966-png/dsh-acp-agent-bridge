@@ -114,6 +114,9 @@
   .input::placeholder { color: #b3bbc9; }
   .input:focus { border-color: #b9d4f6; box-shadow: 0 0 0 4px rgba(185, 212, 246, 0.28); }
 
+  .adapter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .adapter-name { font-size: 11px; color: var(--ink-faint); word-break: break-all; }
+  .btn.small { padding: 4px 11px; font-size: 11.5px; }
   .hint { margin: 5px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-faint); word-break: break-all; }
 
   .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -225,6 +228,49 @@ const el = (tag, className, text) => {
   return node
 }
 
+const adapterBlock = (agent) => {
+  const adapter = agent.adapter || {}
+  const wrap = el('div', 'adapter')
+  const label = el('span', 'adapter-name', `ACP 适配器 ${adapter.package || agent.adapterPackage} ${adapter.pinned || ''}`.trim())
+
+  const status = el('span', `chip ${adapter.ready ? 'ready' : 'off'}`, adapter.ready
+    ? (adapter.source === 'config' ? '自定义' : `已安装${adapter.version ? ` · ${adapter.version}` : ''}`)
+    : (adapter.install?.status === 'installing' ? '安装中…' : '未安装'))
+
+  wrap.append(label, status)
+
+  if (!adapter.ready || adapter.install?.status === 'error') {
+    const button = el('button', 'btn small', adapter.install?.status === 'error' ? '重试安装' : '安装')
+    button.onclick = async () => {
+      button.disabled = true
+      button.textContent = '安装中…'
+      try {
+        await api(`/api/adapters/${agent.id}/install`, { method: 'POST' })
+        for (;;) {
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          const progress = await api(`/api/adapters/${agent.id}`)
+          if (progress.install?.status === 'done' || progress.install?.status === 'error') {
+            if (progress.install.status === 'error') toast(progress.install.error || '安装失败')
+            else toast('适配器已安装')
+            await load()
+            return
+          }
+        }
+      } catch (error) {
+        button.disabled = false
+        button.textContent = '安装'
+        toast(error.message)
+      }
+    }
+    wrap.append(button)
+  }
+
+  if (adapter.install?.status === 'error') {
+    wrap.append(el('p', 'hint', adapter.install.error || '安装失败'))
+  }
+  return wrap
+}
+
 const cardFor = (agent) => {
   const card = el('section', 'card')
   const head = el('div', 'card-head')
@@ -255,8 +301,9 @@ const cardFor = (agent) => {
   input.placeholder = agent.effectiveCommand
   field.append(input)
   field.append(el('p', 'hint', agent.command === ''
-    ? `自动探测 · 每次启动重新解析 · ACP：${agent.adapterPackage}`
-    : `固定路径 · 清空并保存可恢复自动 · ACP：${agent.adapterPackage}`))
+    ? '自动探测 · 每次启动重新解析'
+    : '固定路径 · 清空并保存可恢复自动'))
+  field.append(adapterBlock(agent))
 
   const actions = el('div', 'actions')
   const saveButton = el('button', 'btn primary', '保存')
@@ -286,6 +333,14 @@ const render = (state) => {
 
   const cards = document.getElementById('cards')
   cards.replaceChildren(...state.agents.map(cardFor))
+}
+
+const load = async () => {
+  try {
+    render(await api('/api/state'))
+  } catch (error) {
+    document.getElementById('config-path').textContent = `读取失败：${error.message}`
+  }
 }
 
 const save = async (id, patch) => {

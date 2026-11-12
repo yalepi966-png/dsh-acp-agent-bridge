@@ -31,7 +31,7 @@ and lets the agent delegate a self-contained task to it over the
 | Claude Code CLI | Optional. Must be installed and logged in to use `ask_claude`. |
 | Codex CLI | Optional. Must be installed and logged in to use `ask_codex`. |
 | Node.js | Not needed separately — adapters start on the host's own Node. |
-| ACP adapters | Installed with this package; no runtime download. |
+| ACP adapters | Installed on demand from the panel; pinned versions ship inside the plugin. |
 
 ## Install
 
@@ -138,8 +138,8 @@ a fresh process.
 - **Single turn** — no multi-turn memory between calls; put the context in the task text.
 - **Tested on macOS arm64 only** — the code handles Windows `PATHEXT` and starts adapters through
   `node <js>`, but other platforms have not been verified.
-- **~770 MB install** — almost entirely the two vendors' platform binaries. Move the adapters to
-  `optionalDependencies` if you prefer `npx` on first use.
+- **Adapters are ~770 MB when installed** — almost entirely the two vendors' platform binaries. The
+  plugin package itself stays small; the cost is paid once, per adapter, on the card's Install button.
 
 ## Development
 

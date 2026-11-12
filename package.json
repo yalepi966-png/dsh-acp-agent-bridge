@@ -1,7 +1,7 @@
 {
   "name": "dsh-acp-agent-bridge",
   "version": "0.2.0",
-  "description": "Bridge local coding-agent CLIs (Claude Code, Codex) into DeepSeek Harness over ACP, with a local configuration page",
+  "description": "Bridge local coding-agent CLIs (Claude Code, Codex) into DeepSeek Harness over ACP, with a local configuration page and on-demand adapter install",
   "license": "MIT",
   "type": "module",
   "main": "index.js",
@@ -41,8 +41,6 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@agentclientprotocol/claude-agent-acp": "^0.106.0",
-    "@agentclientprotocol/codex-acp": "^2.6.0",
     "@agentclientprotocol/sdk": "^0.25.1"
   },
   "repository": {
