@@ -152,14 +152,23 @@
   .port-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; align-items: center; }
 
   .toast {
-    position: fixed; left: 50%; bottom: 18px; transform: translate(-50%, 12px);
-    padding: 7px 14px; font-size: 11.5px; color: #48536b;
-    background: rgba(255, 255, 255, 0.88); border: 1px solid var(--line);
-    border-radius: 999px; box-shadow: 0 10px 26px rgba(120, 132, 160, 0.18);
+    position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 14px) scale(0.98);
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 18px; font-size: 12.5px; font-weight: 600; color: #1f5c3f;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(143, 227, 192, 0.9);
+    border-radius: 999px; box-shadow: 0 14px 34px rgba(60, 120, 95, 0.22);
     backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
     opacity: 0; pointer-events: none; transition: opacity 0.22s ease, transform 0.22s ease;
   }
-  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast::before {
+    content: ""; width: 16px; height: 16px; border-radius: 50%;
+    background: #3fae7c url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-6' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/11px no-repeat;
+    flex: none;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  .toast.is-error { color: #8f2f3a; border-color: rgba(255, 201, 207, 0.95); }
+  .toast.is-error::before { background-color: #cf5b6a; }
 
   .agent-list { grid-column: 1 / -1; display: grid; gap: 6px; }
   .agent-item {
@@ -246,12 +255,13 @@ let state = null
 let openId = null
 let draft = { id: null, command: '', tag: '', persona: '' }
 
-const toast = (message) => {
+const toast = (message, tone) => {
   const node = document.getElementById('toast')
   node.textContent = message
+  node.classList.toggle('is-error', tone === 'error')
   node.classList.add('show')
   clearTimeout(toast.timer)
-  toast.timer = setTimeout(() => node.classList.remove('show'), 2000)
+  toast.timer = setTimeout(() => node.classList.remove('show'), 2200)
 }
 
 const api = async (path, init) => {
@@ -428,9 +438,9 @@ const save = async (id, patch) => {
       draft = { id, command: saved.command || saved.detection.path || '', tag: saved.roleLabel || '', persona: saved.persona || '' }
     }
     render()
-    toast('已保存')
+    toast('保存成功，下一次派遣立即生效')
   } catch (error) {
-    toast(error.message)
+    toast(error.message, 'error')
   }
 }
 
@@ -474,7 +484,7 @@ document.getElementById('probe').onclick = async (event) => {
     render()
     toast(`已重新探测 · ${new Date().toLocaleTimeString()}`)
   } catch (error) {
-    toast(error.message)
+    toast(error.message, 'error')
   } finally {
     button.disabled = false
     button.textContent = '重新探测'
