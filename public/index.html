@@ -21,7 +21,7 @@
     --peach: #ffd9cc;
     --rose: #ffc9cf;
     --shadow: 0 18px 50px rgba(120, 132, 160, 0.14);
-    --radius-lg: 26px;
+    --radius-lg: 22px;
     --radius-md: 16px;
     --radius-pill: 999px;
   }
@@ -33,7 +33,7 @@
   body {
     margin: 0;
     min-height: 100%;
-    padding: clamp(18px, 4vw, 48px) clamp(14px, 4vw, 40px) 64px;
+    padding: clamp(12px, 2.6vw, 26px) clamp(12px, 3vw, 28px) 26px;
     font: 400 14px/1.65 -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Segoe UI", sans-serif;
     color: var(--ink);
     background:
@@ -48,9 +48,9 @@
 
   .page { width: min(880px, 100%); margin: 0 auto; min-width: 0; }
 
-  .top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: clamp(18px, 3vw, 28px); }
-  h1 { margin: 0; font-size: clamp(22px, 3.4vw, 30px); font-weight: 600; letter-spacing: 0.02em; }
-  .sub { margin: 6px 0 0; font-size: 12.5px; color: var(--ink-faint); word-break: break-all; }
+  .top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: clamp(12px, 2vw, 18px); }
+  h1 { margin: 0; font-size: clamp(20px, 3vw, 26px); font-weight: 600; letter-spacing: 0.02em; }
+  .sub { margin: 4px 0 0; font-size: 12px; color: var(--ink-faint); word-break: break-all; }
 
   .pill {
     display: inline-flex; align-items: center; gap: 6px;
@@ -67,8 +67,8 @@
     background: var(--glass);
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
-    padding: clamp(16px, 2.6vw, 22px);
-    margin-bottom: clamp(14px, 2.2vw, 20px);
+    padding: clamp(13px, 2vw, 17px);
+    margin-bottom: clamp(9px, 1.6vw, 12px);
     box-shadow: var(--shadow);
     backdrop-filter: blur(22px) saturate(150%);
     -webkit-backdrop-filter: blur(22px) saturate(150%);
@@ -101,25 +101,25 @@
   .switch[aria-checked="true"]::after { transform: translateX(20px); }
   .switch:focus-visible { outline: 2px solid #a9c9ff; outline-offset: 2px; }
 
-  .summary { margin: 10px 0 0; font-size: 12.5px; color: var(--ink-soft); }
+  .summary { margin: 6px 0 0; font-size: 12px; color: var(--ink-soft); }
 
-  .field { margin-top: 16px; }
-  .label { display: block; margin-bottom: 6px; font-size: 12px; color: var(--ink-faint); letter-spacing: 0.02em; }
+  .field { margin-top: 10px; }
+  .label { display: block; margin-bottom: 4px; font-size: 12px; color: var(--ink-faint); letter-spacing: 0.02em; }
   .input {
-    width: 100%; min-width: 0; padding: 10px 13px; font: inherit; color: var(--ink);
+    width: 100%; min-width: 0; padding: 8px 12px; font: inherit; color: var(--ink);
     background: var(--glass-strong); border: 1px solid var(--line-soft);
-    border-radius: var(--radius-md); outline: none;
+    border-radius: 13px; outline: none;
     transition: border-color 0.18s ease, box-shadow 0.18s ease;
   }
   .input::placeholder { color: #b3bbc9; }
   .input:focus { border-color: #b9d4f6; box-shadow: 0 0 0 4px rgba(185, 212, 246, 0.28); }
 
-  .hint { margin: 8px 0 0; font-size: 11.5px; line-height: 1.55; color: var(--ink-faint); word-break: break-all; }
+  .hint { margin: 5px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-faint); word-break: break-all; }
 
-  .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 
   .btn {
-    padding: 9px 18px; font: inherit; font-size: 13px; color: #55607a; cursor: pointer;
+    padding: 7px 15px; font: inherit; font-size: 12.5px; color: #55607a; cursor: pointer;
     background: var(--glass-strong); border: 1px solid var(--line-soft);
     border-radius: var(--radius-pill);
     transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
@@ -139,6 +139,9 @@
 
   .port-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; min-width: 0; }
   .port-row .input { flex: 1 1 160px; }
+
+  .top-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .top-right .btn { padding: 6px 14px; }
 
   .toast {
     position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 16px);
@@ -169,7 +172,10 @@
         <h1>外部 Agent 桥</h1>
         <p class="sub" id="config-path">正在读取配置…</p>
       </div>
-      <span class="pill" id="overall"><span class="dot"></span><span id="overall-text">加载中</span></span>
+      <div class="top-right">
+        <span class="pill" id="overall"><span class="dot"></span><span id="overall-text">加载中</span></span>
+        <button class="btn" id="probe">重新探测</button>
+      </div>
     </header>
 
     <section class="card" id="port-card">
@@ -177,7 +183,7 @@
         <span class="name">服务端口</span>
         <span class="chip off" id="port-current">当前 4319</span>
       </div>
-      <p class="summary">面板和独立页面都从这个端口读取配置。换端口会就地重启服务，不需要重启应用。</p>
+      <p class="summary">换端口会就地重启服务，不需要重启应用。</p>
       <div class="field">
         <label class="label" for="port-input">端口（1–65535）</label>
         <div class="port-row">
@@ -191,10 +197,6 @@
 
     <div id="cards"></div>
 
-    <div class="actions">
-      <button class="btn" id="probe">全部重新探测</button>
-      <span class="status" id="probe-status"></span>
-    </div>
   </main>
 
   <div class="toast" id="toast" role="status"></div>
@@ -253,9 +255,8 @@ const cardFor = (agent) => {
   input.placeholder = agent.effectiveCommand
   field.append(input)
   field.append(el('p', 'hint', agent.command === ''
-    ? '留空即自动探测，每次启动重新解析；保存会把当前路径固定下来。'
-    : '当前使用固定路径；清空并保存可恢复自动探测。'))
-  field.append(el('p', 'hint', `ACP 适配器：${agent.adapterPackage}`))
+    ? `自动探测 · 每次启动重新解析 · ACP：${agent.adapterPackage}`
+    : `固定路径 · 清空并保存可恢复自动 · ACP：${agent.adapterPackage}`))
 
   const actions = el('div', 'actions')
   const saveButton = el('button', 'btn primary', '保存')
@@ -330,14 +331,18 @@ const applyPort = async () => {
 
 document.getElementById('port-check').onclick = checkPort
 document.getElementById('port-apply').onclick = applyPort
-document.getElementById('probe').onclick = async () => {
-  const status = document.getElementById('probe-status')
-  status.textContent = '探测中…'
+document.getElementById('probe').onclick = async (event) => {
+  const button = event.currentTarget
+  button.disabled = true
+  button.textContent = '探测中…'
   try {
     render(await api('/api/probe', { method: 'POST' }))
-    status.textContent = `已重新探测 · ${new Date().toLocaleTimeString()}`
+    toast(`已重新探测 · ${new Date().toLocaleTimeString()}`)
   } catch (error) {
-    status.textContent = error.message
+    toast(error.message)
+  } finally {
+    button.disabled = false
+    button.textContent = '重新探测'
   }
 }
 
