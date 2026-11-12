@@ -301,9 +301,7 @@ const renderHeader = () => {
   document.getElementById('overall').classList.toggle('is-off', ready.length === 0)
   document.getElementById('overall-text').textContent = ready.length > 0 ? `已启用 ${ready.length} 个` : '未启用'
   document.getElementById('port-card').style.display = ''
-  const saveButton = document.getElementById('save')
-  saveButton.disabled = openId === null
-  saveButton.style.visibility = openId === null ? 'hidden' : 'visible'
+  document.getElementById('save').style.visibility = 'visible'
 }
 
 const adapterBlock = (agent) => {
@@ -491,11 +489,12 @@ document.getElementById('port-apply').onclick = async () => {
 }
 
 document.getElementById('save').onclick = async () => {
-  const target = openId ?? state?.agents?.[0]?.id ?? null
+  const node = document.getElementById('save-state')
+  if (state === null) { node.textContent = '配置尚未加载'; setTimeout(() => { node.textContent = '' }, 1600); return }
+  const target = openId ?? state.agents[0]?.id ?? null
   if (target === null) return
   const agent = state.agents.find(item => item.id === target)
-  if (agent === undefined) return
-  const node = document.getElementById('save-state')
+  if (agent === undefined) { node.textContent = '没有可保存的 Agent'; setTimeout(() => { node.textContent = '' }, 1600); return }
   node.textContent = '保存中…'
   await save(target, payloadFor(agent, draft))
   node.textContent = '已保存'
