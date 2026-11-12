@@ -46,7 +46,13 @@
     align-items: stretch;
   }
 
-  .top { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; margin-bottom: 2px; }
+  .top {
+    grid-column: 1 / -1; position: sticky; top: 0; z-index: 20;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px;
+    margin: 0 -6px 2px; padding: 6px;
+    background: rgba(247, 249, 253, 0.82); border-radius: 12px;
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  }
   h1 { margin: 0; font-size: clamp(16px, 2.2vw, 19px); font-weight: 600; letter-spacing: 0.02em; }
   .sub { margin: 2px 0 0; font-size: 10.5px; color: var(--ink-faint); overflow-wrap: anywhere; }
   .top-right { display: flex; align-items: center; gap: 6px; }
@@ -207,6 +213,7 @@
       </div>
       <div class="top-right">
         <span class="pill" id="overall"><span class="dot"></span><span id="overall-text">加载中</span></span>
+        <button class="btn primary" id="save">保存</button>
         <button class="btn" id="probe">重新探测</button>
       </div>
     </header>
@@ -237,6 +244,7 @@
 <script>
 let state = null
 let openId = null
+let draft = { id: null, command: '', tag: '', persona: '' }
 
 const toast = (message) => {
   const node = document.getElementById('toast')
@@ -282,6 +290,9 @@ const renderHeader = () => {
   document.getElementById('overall').classList.toggle('is-off', ready.length === 0)
   document.getElementById('overall-text').textContent = ready.length > 0 ? `已启用 ${ready.length} 个` : '未启用'
   document.getElementById('port-card').style.display = ''
+  const saveButton = document.getElementById('save')
+  saveButton.disabled = openId === null
+  saveButton.style.visibility = openId === null ? 'hidden' : 'visible'
 }
 
 const adapterBlock = (agent) => {
@@ -333,16 +344,18 @@ const agentBody = (agent) => {
   const pathField = el('div', 'field')
   pathField.append(el('label', 'label', agent.command === '' ? 'CLI 路径（自动探测）' : 'CLI 路径（手动指定）'))
   const pathInput = el('input', 'input')
-  pathInput.value = agent.command || agent.detection.path || ''
+  pathInput.value = draft.id === agent.id ? draft.command : (agent.command || agent.detection.path || '')
   pathInput.placeholder = agent.effectiveCommand
+  pathInput.oninput = () => { draft = { ...draft, id: agent.id, command: pathInput.value } }
   pathField.append(pathInput, adapterBlock(agent))
 
   const tagField = el('div', 'role-row')
   tagField.append(el('span', 'label', '角色标签'))
   const tagInput = el('input', 'input')
-  tagInput.value = agent.roleLabel || ''
+  tagInput.value = draft.id === agent.id ? draft.tag : (agent.roleLabel || '')
   tagInput.placeholder = agent.cliLabel
   tagInput.maxLength = 10
+  tagInput.oninput = () => { draft = { ...draft, id: agent.id, tag: tagInput.value } }
   tagField.append(tagInput)
 
   const personaField = el('div', 'field')
@@ -350,17 +363,16 @@ const agentBody = (agent) => {
   personaField.append(el('label', 'label', '角色设定（派遣时作为前置角色注入）'), counter)
   const persona = el('textarea', 'input')
   persona.rows = 5
-  persona.value = agent.persona || ''
+  persona.value = draft.id === agent.id ? draft.persona : (agent.persona || '')
   persona.placeholder = '写清楚：你是谁、关注什么、输出格式是什么。'
+  persona.oninput = () => { draft = { ...draft, id: agent.id, persona: persona.value }; syncCounter() }
   const syncCounter = () => { counter.textContent = `${persona.value.length} / ${agent.personaMaxChars}` }
   persona.oninput = syncCounter
   syncCounter()
   personaField.append(persona)
 
   const actions = el('div', 'actions')
-  const saveButton = el('button', 'btn primary', '保存')
-  saveButton.onclick = () => save(agent.id, { command: pathInput.value, tag: tagInput.value, persona: persona.value })
-  actions.append(saveButton, el('span', 'hint', '保存后下一次派遣立即生效'))
+  actions.append(el('span', 'hint', '右上角「保存」提交；保存后下一次派遣立即生效'))
 
   body.append(pathField, tagField, personaField, actions)
   return body
@@ -374,7 +386,11 @@ const renderList = () => {
     const item = el('section', `agent-item${open ? ' is-open' : ''}`)
 
     const row = el('div', 'agent-row')
-    row.onclick = () => { openId = open ? null : agent.id; render() }
+    row.onclick = () => {
+      openId = open ? null : agent.id
+      if (!open) draft = { id: agent.id, command: agent.command || agent.detection.path || '', tag: agent.roleLabel || '', persona: agent.persona || '' }
+      render()
+    }
     const name = el('div', 'row-name')
     name.append(el('strong', null, agent.label))
     if (agent.roleLabel) name.append(el('span', 'row-tag', agent.cliLabel))
@@ -407,6 +423,10 @@ const save = async (id, patch) => {
     state = await api(`/api/agents/${id}`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch),
     })
+    const saved = state.agents.find(a => a.id === id)
+    if (saved !== undefined && draft.id === id) {
+      draft = { id, command: saved.command || saved.detection.path || '', tag: saved.roleLabel || '', persona: saved.persona || '' }
+    }
     render()
     toast('已保存')
   } catch (error) {
@@ -438,6 +458,11 @@ document.getElementById('port-apply').onclick = async () => {
   } catch (error) {
     document.getElementById('port-status').textContent = error.message
   }
+}
+
+document.getElementById('save').onclick = async () => {
+  if (openId === null) return
+  await save(openId, { command: draft.command, tag: draft.tag, persona: draft.persona })
 }
 
 document.getElementById('probe').onclick = async (event) => {
