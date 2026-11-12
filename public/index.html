@@ -490,12 +490,13 @@ document.getElementById('port-apply').onclick = async () => {
 
 document.getElementById('save').onclick = async () => {
   const node = document.getElementById('save-state')
-  if (state === null) { node.textContent = '配置尚未加载'; setTimeout(() => { node.textContent = '' }, 1600); return }
+  if (node) node.textContent = '处理中…'
+  if (state === null) { if (node) node.textContent = '配置尚未加载'; setTimeout(() => { if (node) node.textContent = '' }, 1600); return }
   const target = openId ?? state.agents[0]?.id ?? null
   if (target === null) return
   const agent = state.agents.find(item => item.id === target)
-  if (agent === undefined) { node.textContent = '没有可保存的 Agent'; setTimeout(() => { node.textContent = '' }, 1600); return }
-  node.textContent = '保存中…'
+  if (agent === undefined) { if (node) node.textContent = '没有可保存的 Agent'; setTimeout(() => { if (node) node.textContent = '' }, 1600); return }
+  if (node) node.textContent = '保存中…'
   await save(target, payloadFor(agent, draft))
   node.textContent = '已保存'
   setTimeout(() => { node.textContent = '' }, 1600)
