@@ -225,6 +225,7 @@ export async function apply(ctx, pluginConfig = {}) {
   if (server) ctx.logger?.info?.('agent-bridge: page at %s', server.url)
   pageUrl = server?.url
   ctx.effect?.(() => () => { void server?.close() })
+
 }
 
 /**

@@ -42,6 +42,10 @@ dsh plugin --profile desktop add github:yalepi966-png/dsh-acp-agent-bridge
 包内声明了 `dsh.bundle.patch`，`dsh plugin add` 会自动把插件行插进 profile 组合，**不用手改
 `cordis.patch.yml`**。装完重启 DeepSeek Harness。
 
+> **必须用 bundle 方式安装，不要手动插条目。** 手写进 profile 的 `cordis.patch.yml` 只会注册宿主
+> 工具，**侧栏入口不会出现**：客户端模块注册表只为 profile bundle 层组合浏览器 bundle。
+> `dsh plugin add` 是唯一受支持的路径。
+
 ## 使用
 
 1. 从 DSH 左侧栏底部点「外部 Agent」打开面板，或在浏览器打开 `http://127.0.0.1:4319`。

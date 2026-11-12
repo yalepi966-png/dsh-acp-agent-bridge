@@ -46,6 +46,11 @@ dsh plugin --profile desktop add github:yalepi966-png/dsh-acp-agent-bridge
 The package declares `dsh.bundle.patch`, so the plugin row is inserted into the profile
 automatically — you do not edit `cordis.patch.yml` by hand. Restart DeepSeek Harness afterwards.
 
+> **Install it as a bundle, not by hand.** Adding the row manually to the profile's
+> `cordis.patch.yml` registers the host tools but **not** the sidebar entry: the client module
+> registry only composes browser bundles for profile-bundle layers. `dsh plugin add` is the
+> supported path.
+
 ## Usage
 
 1. Open the panel from the DSH sidebar (bottom-left **External Agents** row), or open
