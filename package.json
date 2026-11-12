@@ -40,9 +40,6 @@
   "engines": {
     "node": ">=20"
   },
-  "dependencies": {
-    "@agentclientprotocol/sdk": "^0.25.1"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/yalepi966-png/dsh-acp-agent-bridge.git"

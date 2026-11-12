@@ -31,6 +31,7 @@ and lets the agent delegate a self-contained task to it over the
 | Claude Code CLI | Optional. Must be installed and logged in to use `ask_claude`. |
 | Codex CLI | Optional. Must be installed and logged in to use `ask_codex`. |
 | Node.js | Not needed separately — adapters start on the host's own Node. |
+| npm dependencies | **None at runtime** — the ACP transport is built in, so git and local-directory installs need no extra packages. |
 | ACP adapters | Installed on demand from the panel; pinned versions ship inside the plugin. |
 
 ## Install
