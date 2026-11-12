@@ -113,6 +113,22 @@ Edit `lib/agents.mjs`:
 Detection, registration, the page, and dispatch all pick it up. The CLI needs an ACP adapter;
 this plugin intentionally has no "raw CLI" fallback, so there is only one dispatch semantics.
 
+### Role label and role definition
+
+Each card takes a **role label** (≤10 characters, display and tool description only) and an optional
+**role definition** (≤4000 characters). The definition is prepended to every dispatched task:
+
+```
+【Role】You are "Reviewer".
+Report problems only, no praise; output a numbered list with fixes.
+
+【Task】
+<the caller's task>
+```
+
+This works with any adapter because it is plain task text — no system-prompt support required. With
+no definition configured the task is sent unchanged.
+
 ### First-token deadline
 
 A delegation that produces no streamed output within **30 seconds** is aborted: the ACP session is

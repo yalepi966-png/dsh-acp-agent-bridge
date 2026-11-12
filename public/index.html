@@ -305,9 +305,28 @@ const cardFor = (agent) => {
     : '固定路径 · 清空并保存可恢复自动'))
   field.append(adapterBlock(agent))
 
+  const roleRow = el('div', 'role-row')
+  roleRow.append(el('span', 'label', '角色标签'))
+  const roleInput = el('input', 'input')
+  roleInput.value = agent.roleLabel || ''
+  roleInput.placeholder = agent.cliLabel
+  roleInput.maxLength = 10
+  roleRow.append(roleInput)
+
+  const details = document.createElement('details')
+  details.className = 'role'
+  const summaryEl = document.createElement('summary')
+  summaryEl.textContent = '角色设定'
+  const persona = document.createElement('textarea')
+  persona.className = 'input'
+  persona.rows = 3
+  persona.value = agent.persona || ''
+  persona.placeholder = '例如：你是严格的代码审查官，只报问题、不夸奖；输出编号列表，每条给修复建议。'
+  details.append(summaryEl, persona)
+
   const actions = el('div', 'actions')
   const saveButton = el('button', 'btn primary', '保存')
-  saveButton.onclick = () => save(agent.id, { command: input.value })
+  saveButton.onclick = () => save(agent.id, { command: input.value, label: roleInput.value, persona: persona.value })
   actions.append(saveButton)
   if (agent.command !== '') {
     const reset = el('button', 'btn ghost', '恢复自动')
@@ -315,7 +334,7 @@ const cardFor = (agent) => {
     actions.append(reset)
   }
 
-  card.append(head, summary, field, actions)
+  card.append(head, summary, field, roleRow, details, actions)
   return card
 }
 

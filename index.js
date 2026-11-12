@@ -145,10 +145,14 @@ export async function apply(ctx, pluginConfig = {}) {
     agents: AGENTS.map((agent) => {
       const entry = config.agents[agent.id]
       const adapter = resolveAdapter(agent, entry)
+      const effectiveLabel = (entry.label || '').trim() || agent.label
       const adapterInfo = adapterStatus(agent, entry)
       return {
         id: agent.id,
-        label: agent.label,
+        label: effectiveLabel,
+        cliLabel: agent.label,
+        roleLabel: entry.label,
+        persona: entry.persona,
         enabled: entry.enabled,
         command: entry.command,
         effectiveCommand: entry.command || agent.bin,
@@ -179,6 +183,8 @@ export async function apply(ctx, pluginConfig = {}) {
     const entry = config.agents[id]
     if (typeof patch.enabled === 'boolean') entry.enabled = patch.enabled
     if (typeof patch.command === 'string') entry.command = patch.command.trim()
+    if (typeof patch.label === 'string') entry.label = patch.label.trim().slice(0, 10)
+    if (typeof patch.persona === 'string') entry.persona = patch.persona.slice(0, 4000)
     if (typeof patch.adapterCommand === 'string' && patch.adapterCommand.trim() !== '') {
       entry.adapterCommand = patch.adapterCommand.trim()
     }
@@ -301,12 +307,29 @@ export async function apply(ctx, pluginConfig = {}) {
  * @param {number} firstChunkMs - First-chunk deadline passed to the ACP runner.
  * @returns {object} Raw tool definition.
  */
+/**
+ * Compose the text actually sent to the child: an optional role block plus the task.
+ * @param {{label?: string, persona?: string}} entry - Agent config entry.
+ * @param {string} fallbackLabel - Default display name.
+ * @param {string} task - The caller's task text.
+ * @returns {string} The prompt to send.
+ */
+export function composeTask(entry, fallbackLabel, task) {
+  const persona = (entry.persona ?? '').trim()
+  if (persona === '') return task
+  const name = (entry.label ?? '').trim() || fallbackLabel
+  return `【角色】你是「${name}」。\n${persona}\n\n【任务】\n${task}`
+}
+
 function buildTool(agent, config, firstChunkMs) {
   const entry = config.agents[agent.id]
+  const roleName = (entry.label || '').trim() || agent.label
+  const hasPersona = (entry.persona || '').trim() !== ''
   return {
     name: `ask_${agent.id}`,
-    description: `Delegate one self-contained task to ${agent.label} through its ACP adapter and return the final answer. `
-      + `The child runs in its own process as "${agent.id}" and receives only the task text, never this conversation.`,
+    description: `Delegate one self-contained task to ${roleName} (${agent.label}) through its ACP adapter and return the final answer. `
+      + `The child runs in its own process as "${agent.id}" and receives only the task text, never this conversation.`
+      + (hasPersona ? ` It follows the role definition configured on the bridge panel.` : ''),
     parameters: {
       type: 'object',
       properties: { task: { type: 'string', description: 'The complete, self-contained task for the child agent.' } },
@@ -330,7 +353,7 @@ function buildTool(agent, config, firstChunkMs) {
           command: adapter.command,
           args: adapter.args,
           cwd: process.cwd(),
-          task: String(args.task),
+          task: composeTask(entry, agent.label, String(args.task)),
           timeoutMs: 240_000,
           firstChunkMs,
           signal: exec?.signal,

@@ -60,7 +60,10 @@ const state = () => ({
     const info = adapterStatus(agent, entry)
     return {
       id: agent.id,
-      label: agent.label,
+      label: (entry.label || '').trim() || agent.label,
+      cliLabel: agent.label,
+      roleLabel: entry.label,
+      persona: entry.persona,
       enabled: entry.enabled,
       command: entry.command,
       effectiveCommand: entry.command || agent.bin,
@@ -85,6 +88,8 @@ const update = async (id, patch) => {
   if (entry === undefined) throw new Error(`未知 agent: ${id}`)
   if (typeof patch.enabled === 'boolean') entry.enabled = patch.enabled
   if (typeof patch.command === 'string') entry.command = patch.command.trim()
+  if (typeof patch.label === 'string') entry.label = patch.label.trim().slice(0, 10)
+  if (typeof patch.persona === 'string') entry.persona = patch.persona.slice(0, 4000)
   if (typeof patch.adapterCommand === 'string' && patch.adapterCommand.trim() !== '') entry.adapterCommand = patch.adapterCommand.trim()
   if (Array.isArray(patch.adapterArgs)) entry.adapterArgs = patch.adapterArgs.map(String)
   await saveConfig(config)
